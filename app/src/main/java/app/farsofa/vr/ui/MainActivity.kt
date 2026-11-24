@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        app.farsofa.vr.core.Diagnostics.init(this)
         discovery = Discovery(this)
         consoleStore = ConsoleStore(this)
         psnStore = PsnStore(this)

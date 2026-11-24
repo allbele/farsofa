@@ -149,4 +149,12 @@
     <string name="quit_remote_link">Could not link over the internet. Check that the console is on the same PlayStation account you used here.</string>
     <string name="quit_other">The connection dropped. If it keeps happening, restart the console and try again.</string>
     <string name="quit_remote_failed">Could not connect over the internet (%1$s). See \"How to prepare the console\"; if everything is already on, restart the console and try again.</string>
+    <string name="report_open">Something went wrong? Send an error report</string>
+    <string name="report_title">Send an error report</string>
+    <string name="report_body">The app keeps a technical diary on the headset of the last times you played: what worked, where the connection stopped, how good the Wi-Fi was. Sending it helps find and fix the problem.</string>
+    <string name="report_privacy">Not included: your account, your password, the name of the console, addresses on your network. Nothing is sent unless you tap Send.</string>
+    <string name="report_send">Send</string>
+    <string name="report_failed">Could not send it right now. Check that the headset has internet and try again.</string>
+    <string name="report_sent">Report sent. This is its code:</string>
+    <string name="report_sent_hint">If you ask for help at contato@allbele.com, quote this code so we can find your report.</string>
 </resources>

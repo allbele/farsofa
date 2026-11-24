@@ -188,6 +188,8 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     }
 
     init {
+        Diagnostics.init(activity)
+        Native.setLogDirectory(activity.filesDir.absolutePath)
         val psnDuid = intent.getStringExtra(EXTRA_PSN_DUID)
         val psnToken = intent.getStringExtra(EXTRA_PSN_TOKEN)
         val psnAccount = intent.getByteArrayExtra(EXTRA_PSN_ACCOUNT)

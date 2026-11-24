@@ -1,0 +1,11 @@
+name = "farsofa-reports"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# The address the app posts to (Report.ENDPOINT).
+routes = [{ pattern = "reports.allbele.com", custom_domain = true }]
+
+# Create the namespace once with `npx wrangler kv namespace create REPORTS` and put its id here.
+[[kv_namespaces]]
+binding = "REPORTS"
+id = "REPLACE_WITH_NAMESPACE_ID"

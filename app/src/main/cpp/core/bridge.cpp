@@ -42,6 +42,7 @@ jobject jnistr_from_ascii(JNIEnv *env, const char *str);
 namespace {
 
 ChiakiLog g_log;
+std::string g_log_directory;
 
 // JNIEnv for the current thread; detaches on scope exit only if this scope attached it.
 struct ScopedEnv
@@ -583,6 +584,11 @@ JNIEXPORT void JNICALL NATIVE(registFree)(JNIEnv *env, jclass, jlong ptr)
 	delete regist;
 }
 
+JNIEXPORT void JNICALL NATIVE(setLogDirectory)(JNIEnv *env, jclass, jstring path)
+{
+	g_log_directory = to_std_string(env, path);
+}
+
 // --- Session ---
 
 // Everything a session needs except the library's own part: decoders, log, listener, video settings.
@@ -607,7 +613,10 @@ static Session *new_session(JNIEnv *env, jint resolution_preset, jint fps, jint 
 	chiaki_controller_state_set_idle(&session->controller);
 	chiaki_orientation_tracker_init(&session->orientation);
 	chiaki_accel_new_zero_set_inactive(&session->accel_zero, false);
-	android_chiaki_file_log_init(&session->log, CHIAKI_LOG_ALL & ~CHIAKI_LOG_VERBOSE, nullptr);
+	// Kept on the headset for an error report the player may choose to send; each session replaces it.
+	std::string log_file = g_log_directory.empty() ? "" : g_log_directory + "/session.log";
+	android_chiaki_file_log_init(&session->log, CHIAKI_LOG_ALL & ~(CHIAKI_LOG_VERBOSE | CHIAKI_LOG_DEBUG),
+			log_file.empty() ? nullptr : log_file.c_str());
 
 	ChiakiErrorCode err = android_chiaki_video_decoder_init(&session->video, &session->log,
 			static_cast<int32_t>(info.video_profile.width), static_cast<int32_t>(info.video_profile.height),

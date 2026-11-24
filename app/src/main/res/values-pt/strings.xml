@@ -148,4 +148,12 @@
     <string name="quit_remote_link">Não foi possível vincular pela internet. Veja se o console está na mesma conta da PlayStation que você usou aqui.</string>
     <string name="quit_other">A conexão caiu. Se isso se repetir, reinicie o console e tente outra vez.</string>
     <string name="quit_remote_failed">Não foi possível conectar pela internet (%1$s). Veja o guia \"Como preparar o console\"; se já estiver tudo ligado, reinicie o console e tente outra vez.</string>
+    <string name="report_open">Algo deu errado? Enviar relatório de erro</string>
+    <string name="report_title">Enviar relatório de erro</string>
+    <string name="report_body">O app guarda no headset um diário técnico das últimas vezes que você jogou: o que funcionou, onde a conexão parou, a qualidade do Wi-Fi. Enviar esse diário ajuda a descobrir e corrigir o problema.</string>
+    <string name="report_privacy">Não vai junto: sua conta, sua senha, o nome do console, endereços da sua rede. Nada é enviado sem você tocar em Enviar.</string>
+    <string name="report_send">Enviar</string>
+    <string name="report_failed">Não foi possível enviar agora. Veja se o headset está com internet e tente de novo.</string>
+    <string name="report_sent">Relatório enviado. Este é o código dele:</string>
+    <string name="report_sent_hint">Se for pedir ajuda em contato@allbele.com, informe este código para acharmos o seu relatório.</string>
 </resources>

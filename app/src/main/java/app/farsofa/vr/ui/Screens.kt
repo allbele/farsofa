@@ -2,6 +2,11 @@
 
 package app.farsofa.vr.ui
 
+import app.farsofa.vr.core.Report
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
@@ -252,6 +257,8 @@ fun ConsoleListScreen(
     val context = LocalContext.current
     val guidePrefs = remember { context.getSharedPreferences("guide", android.content.Context.MODE_PRIVATE) }
     var guideOpen by remember { mutableStateOf(rows.none { it.registered != null } && !guidePrefs.getBoolean("seen", false)) }
+    var reportOpen by remember { mutableStateOf(false) }
+    if (reportOpen) ReportDialog(onDismiss = { reportOpen = false })
     if (guideOpen) SetupGuideDialog(onDismiss = { guideOpen = false; guidePrefs.edit().putBoolean("seen", true).apply() })
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -337,8 +344,74 @@ fun ConsoleListScreen(
                     }
                 }
             }
+            item {
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = { reportOpen = true }) { Text(stringResource(R.string.report_open)) }
+            }
         }
     }
+}
+
+/**
+ * Sends the app's diary of its last sessions to the developer, when the player asks. Says what goes
+ * and what does not, and afterwards shows the code to quote when asking for help.
+ */
+@Composable
+fun ReportDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sending by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text(stringResource(R.string.report_title)) },
+        text = {
+            Column {
+                val sent = code
+                if (sent != null) {
+                    Text(stringResource(R.string.report_sent))
+                    Spacer(Modifier.height(12.dp))
+                    Text(sent, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(12.dp))
+                    Text(stringResource(R.string.report_sent_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    Text(stringResource(R.string.report_body))
+                    Spacer(Modifier.height(10.dp))
+                    Text(stringResource(R.string.report_privacy), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    if (failed) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(stringResource(R.string.report_failed), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (code != null) {
+                Button(onClick = onDismiss) { Text(stringResource(R.string.controller_done)) }
+            } else {
+                Button(
+                    enabled = !sending,
+                    onClick = {
+                        sending = true
+                        failed = false
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { runCatching { Report.send(context) } }
+                            sending = false
+                            result.onSuccess { code = it.ifEmpty { "OK" } }.onFailure { failed = true }
+                        }
+                    },
+                ) {
+                    if (sending) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Text(stringResource(R.string.report_send))
+                }
+            }
+        },
+        dismissButton = {
+            if (code == null) OutlinedButton(onClick = onDismiss, enabled = !sending) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 /** What has to be switched on at the console before any of this works, in the order it is done. */

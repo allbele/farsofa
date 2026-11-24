@@ -233,3 +233,16 @@ class RemoteConsolesTest {
         assertEquals("no answer", (app.farsofa.vr.ui.RemoteConsoles.parse(null) as app.farsofa.vr.ui.RemoteConsoles.Failed).reason)
     }
 }
+
+class ReportTest {
+    @Test
+    fun nothingThatPointsAtThePlayerSurvives() {
+        val text = "host 192.168.1.20 mac aa:bb:cc:dd:ee:ff duid=" + "ab".repeat(32) + " token: abc.def nickname = Sala rssi=-52dBm"
+        val clean = app.farsofa.vr.core.Report.redact(text)
+        for (secret in listOf("192.168.1.20", "aa:bb:cc:dd:ee:ff", "abab", "abc.def", "Sala")) {
+            assertEquals("$secret should be gone from: $clean", false, clean.contains(secret))
+        }
+        // What helps to diagnose stays.
+        assertEquals(true, clean.contains("rssi=-52dBm"))
+    }
+}

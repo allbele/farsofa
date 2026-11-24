@@ -54,6 +54,9 @@ object Native {
         fun onHaptics(pcm: ByteArray)
     }
 
+    /** Where the library writes the log of the session in progress, replaced at each new session. */
+    @JvmStatic external fun setLogDirectory(path: String)
+
     @JvmStatic external fun generateDuid(): String?
 
     @JvmStatic external fun discoveryStart(subnetBroadcast: String?, listener: DiscoveryListener): Long

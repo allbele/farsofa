@@ -12,3 +12,6 @@ local.properties
 keystore.properties
 .venv/
 test-logs/
+store/listing.md
+store/screenshots/
+signing/

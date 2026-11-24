@@ -43,4 +43,4 @@ If this policy changes, the new version will be published at the same address wi
 
 ## Contact
 
-Questions about this policy: CONTACT_EMAIL_TO_BE_SET
+Questions about this policy: contato@allbele.com

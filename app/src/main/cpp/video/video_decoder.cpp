@@ -43,6 +43,9 @@ void *output_thread(void *user)
 		ssize_t index = AMediaCodec_dequeueOutputBuffer(decoder->codec, &info, OUTPUT_TIMEOUT_US);
 		if(index >= 0)
 			AMediaCodec_releaseOutputBuffer(decoder->codec, static_cast<size_t>(index), info.size != 0);
+		else if(index != AMEDIACODEC_INFO_TRY_AGAIN_LATER && index != AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED
+			&& index != AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED)
+			usleep(5000); // a decoder in trouble answers at once; do not spin on it
 	}
 	return nullptr;
 }
@@ -58,7 +61,7 @@ AMediaFormat *make_format(const char *mime, int32_t width, int32_t height, bool 
 		// Written as text because the named constants only exist from Android 11 on.
 		AMediaFormat_setInt32(format, "low-latency", 1);
 		AMediaFormat_setInt32(format, "priority", 0); // realtime
-		AMediaFormat_setInt32(format, "operating-rate", INT_MAX);
+		AMediaFormat_setInt32(format, "operating-rate", 32767); // "as fast as you can"; larger values are refused
 		AMediaFormat_setInt32(format, "vendor.qti-ext-dec-low-latency.enable", 1);
 	}
 	return format;

@@ -394,7 +394,7 @@ void session_event_cb(ChiakiEvent *event, void *user)
 			break;
 		case CHIAKI_EVENT_PLAYER_INDEX:
 			env->CallVoidMethod(session->listener, session->on_pad_light, static_cast<jint>(1),
-					static_cast<jint>(event->player_index));
+					static_cast<jint>(event->player_index & 0x0F));
 			break;
 		case CHIAKI_EVENT_HAPTIC_INTENSITY:
 			env->CallVoidMethod(session->listener, session->on_pad_intensity, static_cast<jint>(0),

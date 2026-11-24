@@ -550,6 +550,9 @@ void SmoothVideo::Render(JNIEnv *env)
 				int newest = history_newest_;
 				if(!extrapolate_checked_)
 					while(glGetError() != GL_NO_ERROR) { }
+				// The last real picture goes in first: a prediction that quietly does nothing then leaves
+				// that on screen, and not whatever this image held a few frames ago.
+				DrawVideo(target, false);
 				extrapolate_(history_[1 - newest], history_[newest], target, scale);
 				if(!extrapolate_checked_)
 				{
@@ -575,9 +578,10 @@ void SmoothVideo::Render(JNIEnv *env)
 				}
 			}
 		}
-		else if(shown_predicted_)
+		else if(shown_predicted_ || fresh)
 		{
-			// The guess has run out and the real picture has not arrived: go back to the last real one.
+			// Either the guess has run out and the real picture has not arrived, or a new picture was
+			// taken for a repeat and there is no guess to show instead: put the decoder's picture up.
 			GLuint target = Acquire();
 			if(target)
 			{

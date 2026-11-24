@@ -37,7 +37,6 @@ import java.util.concurrent.locks.LockSupport
 class DualSenseLink(context: Context) {
     private val context = context.applicationContext
     private val lock = Object()
-    private val sendLock = Any()
 
     private var worker: Thread? = null
     private var hapticsWorker: Thread? = null
@@ -47,8 +46,6 @@ class DualSenseLink(context: Context) {
     private var proxy: BluetoothProfile? = null
     private var device: BluetoothDevice? = null
     private var sendData: Method? = null
-    private var sequence = 0
-    private var hapticsBlock = 0
     @Volatile private var lastSendTime = 0L
 
     /** True while messages are reaching a DualSense. */
@@ -77,6 +74,7 @@ class DualSenseLink(context: Context) {
     // Haptics waiting to be played, as signed 8-bit stereo. Guarded by [hapticsQueue] itself.
     private val hapticsQueue = ByteArray(HAPTICS_QUEUE_SIZE)
     private var hapticsQueued = 0
+    private var hapticsArrivals = 0
     @Volatile private var hapticsWanted = false
 
     /** True while the fine haptics are being played by the controller's own actuators. */
@@ -88,6 +86,10 @@ class DualSenseLink(context: Context) {
             triggersEnabled = triggers
             lightsEnabled = lights
             triggersPending = true
+            // The console only reports a player number or a colour when it changes, and for one
+            // player with no colour chosen it never does. Start from what that silence means.
+            if (lights && player == null) player = 0
+            lightsPending = lights
         }
         hapticsWanted = haptics
         running = true
@@ -100,6 +102,7 @@ class DualSenseLink(context: Context) {
         if (!running) return
         running = false
         synchronized(lock) { lock.notifyAll() }
+        worker?.interrupt()
         hapticsWorker?.interrupt()
         try {
             hapticsWorker?.join(500)
@@ -162,6 +165,7 @@ class DualSenseLink(context: Context) {
         val gain = synchronized(lock) { if (rumbleSetting == 0) 0f else TriggerStrength.factor(rumbleSetting) }
         val frames = pcm.size / 4
         synchronized(hapticsQueue) {
+            hapticsArrivals++
             for (frame in 0 until frames) {
                 if (hapticsQueued + 2 > hapticsQueue.size) {
                     // Full: forget the oldest sound rather than play everything late.
@@ -276,7 +280,12 @@ class DualSenseLink(context: Context) {
         }
         val state = change
         if (state != null) {
-            if (!send(DualSenseReport.state(state))) markAllPending()
+            if (!send(DualSenseReport.state(state))) {
+                // Refused: the controller is leaving, or the system no longer lets us. Not worth hammering.
+                markAllPending()
+                pause(1_000L)
+                return 0
+            }
             // A burst of effects from the console becomes at most one message every few milliseconds.
             return if (hadTriggers) 8 else 1
         }
@@ -315,6 +324,7 @@ class DualSenseLink(context: Context) {
         var next = System.nanoTime()
         var flowing = false
         var emptyReads = 0
+        var seenArrivals = 0
         var silentBlocks = 0
         var lastSetup = 0L
         try {
@@ -336,7 +346,10 @@ class DualSenseLink(context: Context) {
                         System.arraycopy(hapticsQueue, drop, hapticsQueue, 0, hapticsQueued - drop)
                         hapticsQueued -= drop
                     }
-                    emptyReads = if (hapticsQueued == 0) emptyReads + 1 else 0
+                    // Counted in rounds with nothing new, not rounds with nothing left: the end of an
+                    // effect is usually a few samples short of a block, and those must not wait for the next.
+                    emptyReads = if (hapticsArrivals == seenArrivals) emptyReads + 1 else 0
+                    seenArrivals = hapticsArrivals
                     val whole = hapticsQueued >= block.size
                     // A short effect after silence goes out at once, and so does the tail of a longer one.
                     val partial = hapticsQueued in 1 until block.size && (!flowing || emptyReads >= 2)
@@ -348,7 +361,7 @@ class DualSenseLink(context: Context) {
                     }
                 }
                 for (index in taken until block.size) block[index] = 0
-                if (taken > 0) flowing = true else if (emptyReads >= 2) flowing = false
+                if (taken > 0 && emptyReads < 2) flowing = true else if (emptyReads >= 2) flowing = false
 
                 // Silence still fills the controller's queue, so after a moment of it nothing is sent at all.
                 silentBlocks = if (block.all { it.toInt() == 0 }) silentBlocks + 1 else 0
@@ -481,6 +494,12 @@ class DualSenseLink(context: Context) {
 
     companion object {
         private const val TAG = "FarsofaPad"
+
+        // The controller numbers what it receives across the whole connection, whoever sends it, so
+        // the count and the order of sending are shared by every link this process ever opens.
+        private val sendLock = Any()
+        private var sequence = 0
+        private var hapticsBlock = 0
 
         /** `BluetoothProfile.HID_HOST`, which the public SDK leaves out. */
         private const val HID_HOST = 4

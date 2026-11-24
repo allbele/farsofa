@@ -49,6 +49,8 @@ class PadMotion(
         inputManager.unregisterInputDeviceListener(this)
         handler?.post { detach() }
         running.quitSafely()
+        // A reading already on its way must be done before the session it is headed for goes away.
+        try { running.join(200) } catch (e: InterruptedException) { Thread.currentThread().interrupt() }
         thread = null
         handler = null
     }

@@ -52,7 +52,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         fun onMenuPad(buttons: Int)
     }
 
-    private var ptr = 0L
+    @Volatile private var ptr = 0L
     private var started = false
     private val handler = Handler(Looper.getMainLooper())
     private val teardown = Executors.newSingleThreadExecutor()
@@ -84,6 +84,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     )
     private var rumbleSetting = 1
     private var lastRumble = 0
+    private var lastRumbleTime = 0L
     private val rumbleWatchdog = Runnable { lastRumble = 0; stopRumble() }
 
     /** Whether the controller's touchpad fingers are wanted, which needs the window to capture the pointer. */
@@ -313,6 +314,8 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         val factor = if (rumbleSetting == 0) 0f else app.farsofa.vr.input.TriggerStrength.factor(rumbleSetting)
         val scaledLeft = (left * factor).toInt()
         val scaledRight = (right * factor).toInt()
+        // While the controller plays the haptics as sound, a motor command would switch that off.
+        if (padPrefs.fineHaptics && padLink.connected) return@runOnUiThread
         if (padLink.connected) {
             // One writer only: the system's vibration and our own messages to the controller undo each other.
             padLink.setMotors(scaledLeft, scaledRight)
@@ -321,9 +324,13 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         // The console repeats a rumble while it lasts and says nothing when it ends.
         handler.removeCallbacks(rumbleWatchdog)
         if (scaledLeft != 0 || scaledRight != 0) handler.postDelayed(rumbleWatchdog, RUMBLE_TIMEOUT_MS)
+        // A steady rumble is renewed with the same strengths; it is restarted only often enough to
+        // outlast the vibration it started, because restarting it every time is felt as pulsing.
         val key = (scaledLeft shl 8) or scaledRight
-        if (key == lastRumble) return@runOnUiThread
+        val now = SystemClock.uptimeMillis()
+        if (key == lastRumble && now - lastRumbleTime < RUMBLE_MS / 2) return@runOnUiThread
         lastRumble = key
+        lastRumbleTime = now
         rumble(scaledLeft, scaledRight)
     }
 

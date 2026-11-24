@@ -135,6 +135,9 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             isFocusable = true
             isFocusableInTouchMode = true
             requestFocus()
+            // With the pointer captured, the controller's touchpad reports fingers instead of moving a cursor.
+            setOnCapturedPointerListener { _, event -> ::stream.isInitialized && !leaving && stream.onCapturedPointerEvent(event) }
+            focusView = this
         })
 
         store = ScreenLayoutStore(this)
@@ -651,6 +654,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         Diagnostics.event("window focus=$hasFocus")
+        if (hasFocus && ::stream.isInitialized && stream.wantsPointerCapture) focusView?.requestPointerCapture()
     }
 
     override fun onResume() {
@@ -679,6 +683,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         return (!leaving && stream.onMotionEvent(event)) || super.dispatchGenericMotionEvent(event)
     }
 
+    private var focusView: View? = null
     private var rawEventsLogged = 0
     private var rawMotionsLogged = 0
 

@@ -2,6 +2,9 @@
 
 package app.farsofa.vr.ui
 
+import app.farsofa.vr.input.PadPrefs
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.Switch
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.webkit.CookieManager
@@ -233,6 +236,7 @@ fun ConsoleListScreen(
     onForget: (ConsoleRow) -> Unit,
     onSignOut: () -> Unit,
 ) {
+    var controllerOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -241,8 +245,10 @@ fun ConsoleListScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
+            TextButton(onClick = { controllerOpen = true }) { Text(stringResource(R.string.controller_title)) }
             TextButton(onClick = onSignOut) { Text(stringResource(R.string.sign_out)) }
         }
+        if (controllerOpen) ControllerDialog(onDismiss = { controllerOpen = false })
         Text(stringResource(R.string.streaming_notice), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         if (notice != null) {
             Spacer(Modifier.height(8.dp))
@@ -339,6 +345,44 @@ private fun ConsoleCard(
             }
         }
     }
+}
+
+/** What a DualSense does beyond buttons and sticks. Changes apply to the next game started. */
+@Composable
+fun ControllerDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { PadPrefs(context) }
+    var triggers by remember { mutableStateOf(prefs.triggers) }
+    var lights by remember { mutableStateOf(prefs.lights) }
+    var motion by remember { mutableStateOf(prefs.motion) }
+    var fineHaptics by remember { mutableStateOf(prefs.fineHaptics) }
+
+    @Composable
+    fun option(title: Int, detail: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            Column(Modifier.weight(1f).padding(end = 16.dp)) {
+                Text(stringResource(title), fontWeight = FontWeight.Medium)
+                Text(stringResource(detail), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            }
+            Switch(checked = checked, onCheckedChange = onChange)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.controller_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.controller_intro), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+                option(R.string.controller_triggers, R.string.controller_triggers_detail, triggers) { triggers = it; prefs.triggers = it }
+                option(R.string.controller_lights, R.string.controller_lights_detail, lights) { lights = it; prefs.lights = it }
+                option(R.string.controller_motion, R.string.controller_motion_detail, motion) { motion = it; prefs.motion = it }
+                option(R.string.controller_haptics, R.string.controller_haptics_detail, fineHaptics) { fineHaptics = it; prefs.fineHaptics = it }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.controller_done)) } },
+    )
 }
 
 @Composable

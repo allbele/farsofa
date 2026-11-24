@@ -7,8 +7,11 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <sys/socket.h>
 
 #include <atomic>
+#include <mutex>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -17,6 +20,7 @@
 #include <chiaki/controller.h>
 #include <chiaki/discoveryservice.h>
 #include <chiaki/log.h>
+#include <chiaki/orientation.h>
 #include <chiaki/regist.h>
 #include <chiaki/remote/holepunch.h>
 #include <chiaki/session.h>
@@ -210,6 +214,21 @@ struct Session
 	jmethodID on_login_pin_request;
 	jmethodID on_quit;
 	jmethodID on_rumble;
+	jmethodID on_trigger_effects;
+	jmethodID on_pad_light;
+	jmethodID on_pad_intensity;
+	jmethodID on_motion_reset;
+	jmethodID on_haptics;
+
+	// What the buttons and sticks last were, and where the controller's own motion sensors point.
+	// The two arrive on different threads and leave for the console as one state.
+	std::mutex controller_mutex;
+	ChiakiControllerState controller = {};
+	ChiakiOrientationTracker orientation = {};
+	ChiakiAccelNewZero accel_zero = {};
+	float accel_last[3] = {0.0f, 0.0f, 0.0f};
+	bool motion_active = false;
+	std::atomic<bool> forward_haptics{false};
 
 	// Counted on the stream thread, read by the UI for diagnostics.
 	std::atomic<int64_t> video_frames{0};
@@ -245,6 +264,23 @@ void haptics_frame_cb(uint8_t *buf, size_t buf_size, void *user)
 	size_t frames = buf_size / 4;
 	if(frames == 0)
 		return;
+	if(session->forward_haptics.load())
+	{
+		// The controller's own actuators can play the waveform as it is.
+		ScopedEnv scoped;
+		if(!scoped.env)
+			return;
+		jbyteArray pcm = scoped.env->NewByteArray(static_cast<jsize>(frames * 4));
+		if(pcm)
+		{
+			scoped.env->SetByteArrayRegion(pcm, 0, static_cast<jsize>(frames * 4), reinterpret_cast<const jbyte *>(buf));
+			scoped.env->CallVoidMethod(session->listener, session->on_haptics, pcm);
+			scoped.env->DeleteLocalRef(pcm);
+		}
+		if(scoped.env->ExceptionCheck())
+			scoped.env->ExceptionClear();
+		return;
+	}
 	int64_t sum_left = 0, sum_right = 0;
 	for(size_t i = 0; i < frames; i++)
 	{
@@ -266,7 +302,10 @@ void haptics_frame_cb(uint8_t *buf, size_t buf_size, void *user)
 	session->haptic_frames_since_sent++;
 	bool stopped = left == 0 && right == 0 && (session->haptic_left != 0 || session->haptic_right != 0);
 	int change = std::abs(left - session->haptic_left) + std::abs(right - session->haptic_right);
-	if(!stopped && (change < 24 || session->haptic_frames_since_sent < 4))
+	// The console never says an effect is over, the waveform just ends. So a rumble that goes on is
+	// repeated a few times a second, and whoever plays it stops when the repeats do.
+	bool renew = (left != 0 || right != 0) && session->haptic_frames_since_sent >= 12;
+	if(!stopped && !renew && (change < 24 || session->haptic_frames_since_sent < 4))
 		return;
 	session->haptic_left = left;
 	session->haptic_right = right;
@@ -280,6 +319,26 @@ void haptics_frame_cb(uint8_t *buf, size_t buf_size, void *user)
 		scoped.env->ExceptionClear();
 }
 
+// The library asks the system for a receive buffer of 100 KB, which a single large frame overflows:
+// packets are dropped inside the headset, the frame cannot be rebuilt, the console is asked for a
+// key frame, and the key frame is larger still. A bigger buffer breaks that loop. The video is also
+// marked as such, so a Wi-Fi router that sorts traffic by class sends it ahead of bulk data.
+void tune_stream_socket(Session *session)
+{
+	chiaki_socket_t sock = session->session.stream_connection.takion.sock;
+	if(CHIAKI_SOCKET_IS_INVALID(sock))
+		return;
+	int size = 1 << 20;
+	if(setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) != 0)
+		CHIAKI_LOGW(&session->log, "Could not enlarge the stream's receive buffer");
+	int granted = 0;
+	socklen_t length = sizeof(granted);
+	if(getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &granted, &length) == 0)
+		CHIAKI_LOGI(&session->log, "Stream receive buffer: %d bytes", granted);
+	int tos = 34 << 2; // AF41, interactive video
+	setsockopt(sock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos));
+}
+
 void session_event_cb(ChiakiEvent *event, void *user)
 {
 	auto *session = static_cast<Session *>(user);
@@ -291,6 +350,7 @@ void session_event_cb(ChiakiEvent *event, void *user)
 	switch(event->type)
 	{
 		case CHIAKI_EVENT_CONNECTED:
+			tune_stream_socket(session);
 			env->CallVoidMethod(session->listener, session->on_connected);
 			break;
 		case CHIAKI_EVENT_LOGIN_PIN_REQUEST:
@@ -312,13 +372,48 @@ void session_event_cb(ChiakiEvent *event, void *user)
 					static_cast<jint>(event->rumble.left), static_cast<jint>(event->rumble.right));
 			break;
 		case CHIAKI_EVENT_TRIGGER_EFFECTS:
-			// Adaptive triggers need raw access to the controller, which Android does not give over Bluetooth.
-			if(!session->trigger_effects_logged)
+		{
+			// In the order the controller wants them: right trigger first, a mode and ten parameters each.
+			jbyte effects[22];
+			effects[0] = static_cast<jbyte>(event->trigger_effects.type_right);
+			memcpy(effects + 1, event->trigger_effects.right, 10);
+			effects[11] = static_cast<jbyte>(event->trigger_effects.type_left);
+			memcpy(effects + 12, event->trigger_effects.left, 10);
+			jbyteArray array = env->NewByteArray(22);
+			if(array)
 			{
-				session->trigger_effects_logged = true;
-				CHIAKI_LOGI(&session->log, "Console sent adaptive trigger effects (not applied)");
+				env->SetByteArrayRegion(array, 0, 22, effects);
+				env->CallVoidMethod(session->listener, session->on_trigger_effects, array);
+				env->DeleteLocalRef(array);
 			}
 			break;
+		}
+		case CHIAKI_EVENT_LED_COLOR:
+			env->CallVoidMethod(session->listener, session->on_pad_light, static_cast<jint>(0),
+					static_cast<jint>((event->led_state[0] << 16) | (event->led_state[1] << 8) | event->led_state[2]));
+			break;
+		case CHIAKI_EVENT_PLAYER_INDEX:
+			env->CallVoidMethod(session->listener, session->on_pad_light, static_cast<jint>(1),
+					static_cast<jint>(event->player_index));
+			break;
+		case CHIAKI_EVENT_HAPTIC_INTENSITY:
+			env->CallVoidMethod(session->listener, session->on_pad_intensity, static_cast<jint>(0),
+					static_cast<jint>(event->intensity));
+			break;
+		case CHIAKI_EVENT_TRIGGER_INTENSITY:
+			env->CallVoidMethod(session->listener, session->on_pad_intensity, static_cast<jint>(1),
+					static_cast<jint>(event->intensity));
+			break;
+		case CHIAKI_EVENT_MOTION_RESET:
+		{
+			// The game asks for "level" to mean however the controller is being held right now.
+			std::lock_guard<std::mutex> lock(session->controller_mutex);
+			chiaki_accel_new_zero_set_active(&session->accel_zero, session->accel_last[0], session->accel_last[1],
+					session->accel_last[2], false);
+			chiaki_orientation_tracker_init(&session->orientation);
+			env->CallVoidMethod(session->listener, session->on_motion_reset);
+			break;
+		}
 		default:
 			break;
 	}
@@ -500,10 +595,15 @@ JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host,
 	info.video_profile.codec = static_cast<ChiakiCodec>(codec);
 	info.video_profile_auto_downgrade = true;
 	info.enable_idr_on_fec_failure = true;
+	// Left at zero, the loss reported to the console is always "none" and it never eases off.
+	info.packet_loss_max = 0.05;
 	// As a DualSense the console sends haptics, which PS5 games use instead of the old rumble commands.
 	info.enable_dualsense = true;
 
 	auto *session = new Session();
+	chiaki_controller_state_set_idle(&session->controller);
+	chiaki_orientation_tracker_init(&session->orientation);
+	chiaki_accel_new_zero_set_inactive(&session->accel_zero, false);
 	android_chiaki_file_log_init(&session->log, CHIAKI_LOG_ALL & ~CHIAKI_LOG_VERBOSE, nullptr);
 
 	ChiakiErrorCode err = android_chiaki_video_decoder_init(&session->video, &session->log,
@@ -544,6 +644,11 @@ JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host,
 	session->on_login_pin_request = env->GetMethodID(listener_class, "onLoginPinRequest", "(Z)V");
 	session->on_quit = env->GetMethodID(listener_class, "onQuit", "(IZLjava/lang/String;Ljava/lang/String;)V");
 	session->on_rumble = env->GetMethodID(listener_class, "onRumble", "(II)V");
+	session->on_trigger_effects = env->GetMethodID(listener_class, "onTriggerEffects", "([B)V");
+	session->on_pad_light = env->GetMethodID(listener_class, "onPadLight", "(II)V");
+	session->on_pad_intensity = env->GetMethodID(listener_class, "onPadIntensity", "(II)V");
+	session->on_motion_reset = env->GetMethodID(listener_class, "onMotionReset", "()V");
+	session->on_haptics = env->GetMethodID(listener_class, "onHaptics", "([B)V");
 
 	chiaki_session_set_event_cb(&session->session, session_event_cb, session);
 	chiaki_session_set_video_sample_cb(&session->session, count_video_sample, session);
@@ -658,23 +763,58 @@ JNIEXPORT void JNICALL NATIVE(sessionSetController)(JNIEnv *env, jclass, jlong p
 		}
 	}
 
-	if(motion && env->GetArrayLength(motion) == 10)
-	{
-		jfloat values[10];
-		env->GetFloatArrayRegion(motion, 0, 10, values);
-		state.gyro_x = values[0];
-		state.gyro_y = values[1];
-		state.gyro_z = values[2];
-		state.accel_x = values[3];
-		state.accel_y = values[4];
-		state.accel_z = values[5];
-		state.orient_x = values[6];
-		state.orient_y = values[7];
-		state.orient_z = values[8];
-		state.orient_w = values[9];
-	}
+	(void)motion;
+	std::lock_guard<std::mutex> lock(session->controller_mutex);
+	session->controller = state;
+	if(session->motion_active)
+		chiaki_orientation_tracker_apply_to_controller_state(&session->orientation, &session->controller);
+	chiaki_session_set_controller_state(&session->session, &session->controller);
+}
 
-	chiaki_session_set_controller_state(&session->session, &state);
+// One reading of the controller's own gyroscope (rad/s) and accelerometer (g), with its time in
+// microseconds. The console wants the orientation too, which is worked out here from the two.
+JNIEXPORT void JNICALL NATIVE(sessionSetMotion)(JNIEnv *, jclass, jlong ptr, jfloat gx, jfloat gy, jfloat gz,
+		jfloat ax, jfloat ay, jfloat az, jlong time_us, jboolean send)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(!session)
+		return;
+	std::lock_guard<std::mutex> lock(session->controller_mutex);
+	session->accel_last[0] = ax;
+	session->accel_last[1] = ay;
+	session->accel_last[2] = az;
+	session->motion_active = true;
+	chiaki_orientation_tracker_update(&session->orientation, gx, gy, gz, ax, ay, az, &session->accel_zero, false,
+			static_cast<uint32_t>(time_us));
+	if(!send)
+		return;
+	chiaki_orientation_tracker_apply_to_controller_state(&session->orientation, &session->controller);
+	chiaki_session_set_controller_state(&session->session, &session->controller);
+}
+
+// Stops sending motion, for when the controller with the sensors goes away.
+JNIEXPORT void JNICALL NATIVE(sessionClearMotion)(JNIEnv *, jclass, jlong ptr)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(!session)
+		return;
+	std::lock_guard<std::mutex> lock(session->controller_mutex);
+	session->motion_active = false;
+	chiaki_orientation_tracker_init(&session->orientation);
+	session->controller.gyro_x = session->controller.gyro_y = session->controller.gyro_z = 0.0f;
+	session->controller.accel_x = session->controller.accel_z = 0.0f;
+	session->controller.accel_y = 1.0f;
+	session->controller.orient_x = session->controller.orient_y = session->controller.orient_z = 0.0f;
+	session->controller.orient_w = 1.0f;
+	chiaki_session_set_controller_state(&session->session, &session->controller);
+}
+
+// Whether the haptics waveform goes to the app as it is (true) or is reduced to rumble strengths.
+JNIEXPORT void JNICALL NATIVE(sessionForwardHaptics)(JNIEnv *, jclass, jlong ptr, jboolean forward)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(session)
+		session->forward_haptics.store(forward);
 }
 
 } // extern "C"

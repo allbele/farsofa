@@ -34,6 +34,11 @@ import app.farsofa.vr.psn.PsnStore
 import app.farsofa.vr.stream.ImmersiveActivity
 import app.farsofa.vr.stream.StreamActivity
 import app.farsofa.vr.stream.StreamSession
+import android.Manifest
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import app.farsofa.vr.input.DualSenseLink
+import app.farsofa.vr.input.PadPrefs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -214,7 +219,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Talking back to a DualSense needs the Bluetooth permission. It is asked for once, here in the
+    // panel, because a system dialog on top of the immersive screen is worse; the game starts either way.
+    private var afterPermission: (() -> Unit)? = null
+    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        afterPermission?.invoke()
+        afterPermission = null
+    }
+
     private fun play(host: String, console: RegisteredConsole) {
+        val asked = getPreferences(MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 31 && PadPrefs(this).needsLink && !DualSenseLink.available(this)
+            && !asked.getBoolean("bluetoothAsked", false)
+        ) {
+            asked.edit().putBoolean("bluetoothAsked", true).apply()
+            afterPermission = { play(host, console) }
+            bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            return
+        }
         if (console.lastHost != host) {
             consoleStore.save(RegisteredConsole(console.id, console.nickname, console.registKey, console.rpKey, host))
         }

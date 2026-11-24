@@ -29,8 +29,8 @@ android {
         applicationId = "app.farsofa.vr"
         minSdk = 29
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -120,6 +120,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.google.oboe:oboe:1.10.0")
     implementation("org.khronos.openxr:openxr_loader_for_android:1.1.65")
+    // Lets the app reach the system's own Bluetooth controller service, which is how a DualSense is sent its effects.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
 
     testImplementation("junit:junit:4.13.2")
 }

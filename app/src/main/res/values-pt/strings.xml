@@ -62,4 +62,15 @@
     <string name="bar_reset_confirm">Confirmar?</string>
     <string name="bar_backspace">Apagar</string>
     <string name="streaming_notice">A imagem é transmitida do seu próprio console. É preciso uma conexão Wi-Fi rápida e estável.</string>
+    <string name="controller_title">Controle</string>
+    <string name="controller_intro">Para um DualSense pareado com o headset. As mudanças valem para o próximo jogo que você iniciar.</string>
+    <string name="controller_triggers">Gatilhos adaptáveis</string>
+    <string name="controller_triggers_detail">Os gatilhos resistem do jeito que o jogo pede.</string>
+    <string name="controller_lights">Luzes seguem o console</string>
+    <string name="controller_lights_detail">Cor da barra de luz e número do jogador, como no console.</string>
+    <string name="controller_motion">Movimento e touchpad</string>
+    <string name="controller_motion_detail">O giroscópio e o touchpad do controle chegam ao jogo.</string>
+    <string name="controller_haptics">Vibração detalhada (experimental)</string>
+    <string name="controller_haptics_detail">A vibração fina dos jogos de PS5 no lugar da vibração simples. Pode atrasar ou ficar áspera.</string>
+    <string name="controller_done">Pronto</string>
 </resources>

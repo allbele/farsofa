@@ -16,12 +16,13 @@ find_package(OpenXR REQUIRED CONFIG)
 # Builds chiaki-lib and its dependencies. Upstream's own JNI target is configured but never built.
 add_subdirectory("${CHIAKI_DIR}" chiaki-ng EXCLUDE_FROM_ALL)
 
-# core/ is the only code that talks to libchiaki. The decoder and audio helpers are compiled
-# straight from the chiaki-ng tree until the OpenXR video path replaces them.
+# core/ is the only code that talks to libchiaki. The audio decoder and the log helper are compiled
+# straight from the chiaki-ng tree; the video decoder and the audio output are our own, behind the
+# same headers.
 add_library(farsofa SHARED
         src/main/cpp/core/bridge.cpp
         src/main/cpp/xr/xr_screen.cpp
-        "${CHIAKI_ANDROID_CPP}/video-decoder.c"
+        src/main/cpp/video/video_decoder.cpp
         "${CHIAKI_ANDROID_CPP}/audio-decoder.c"
         src/main/cpp/audio/audio_output.cpp
         "${CHIAKI_ANDROID_CPP}/log.c")

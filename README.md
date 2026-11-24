@@ -60,6 +60,13 @@ makefiles fail when the path contains spaces.
 
 Unit tests: `./gradlew :app:testDebugUnitTest`.
 
+## Thanks
+
+How to reach a DualSense over Bluetooth from a Quest (adaptive triggers, lights, haptics), and a good
+part of what can go wrong on the way, was worked out and written down by the
+[P5M](https://github.com/beecrepaldi-afk/P5M) project. Farsofa's implementation is its own, written
+from that knowledge.
+
 ## License
 
 AGPL-3.0-only, see [LICENSE](LICENSE). The app links chiaki-ng, which is licensed under AGPL-3.0-only

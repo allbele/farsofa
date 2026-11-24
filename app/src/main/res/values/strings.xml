@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Farsofa</string>
+    <string name="cancel">Cancel</string>
+
+    <string name="welcome_body">Play your console on a big screen in your headset. Sign in once and your console shows up on its own.</string>
+    <string name="welcome_sign_in">Sign in to PlayStation Network</string>
+    <string name="sign_in_failed">Sign-in didn\'t complete. Check your connection and try again.</string>
+    <string name="sign_out">Sign out</string>
+    <string name="login_title">Sign in to PlayStation Network</string>
+
+    <string name="consoles_title">Your consoles</string>
+    <string name="consoles_searching">Looking for consoles on this network…</string>
+    <string name="consoles_searching_hint">Turn the console on or leave it in rest mode, on the same Wi-Fi network as this headset.</string>
+    <string name="console_ready">On</string>
+    <string name="console_standby">In rest mode</string>
+    <string name="console_offline">Not on this network</string>
+    <string name="console_waking">Waking up…</string>
+    <string name="console_pair">Pair</string>
+    <string name="console_play">Play</string>
+    <string name="console_wake_and_play">Wake and play</string>
+    <string name="console_forget">Forget</string>
+    <string name="wake_timeout">The console didn\'t wake up. Turn it on and try again.</string>
+
+    <string name="pair_title">Pair with %1$s</string>
+    <string name="pair_steps">On the console, open Settings › System › Remote Play › Link Device, then type the 8-digit code shown there.</string>
+    <string name="pair_code_label">8-digit code</string>
+    <string name="pair_failed">Pairing didn\'t work. Check the code, make sure you\'re signed in to the same account on the console, and try again.</string>
+
+    <string name="stream_connecting">Connecting…</string>
+    <string name="stream_exit_hint">Hold L1 + R1 + Options to disconnect</string>
+    <string name="stream_failed_start">Couldn\'t start the connection.</string>
+    <string name="stream_ended_error">The connection ended: %1$s</string>
+    <string name="stream_login_pin_title">Enter the console\'s login passcode</string>
+    <string name="stream_login_pin_incorrect">Wrong passcode. Try again</string>
+    <string name="immersive_failed">Couldn\'t start the immersive screen.</string>
+    <string name="immersive_login_pin">This console asks for a login passcode, which the immersive screen can\'t show yet. Turn the passcode off on the console and try again.</string>
+    <string name="welcome_browser_sign_in">Sign-in page not loading? Use the browser instead</string>
+    <string name="browser_login_title">Sign in with the browser</string>
+    <string name="browser_login_step_1">1. Open the sign-in page in the browser and sign in. When it finishes you\'ll land on a blank page.</string>
+    <string name="browser_login_open">Open the browser</string>
+    <string name="browser_login_step_2">2. Copy that blank page\'s address from the address bar and paste it here.</string>
+    <string name="browser_login_address_label">Address of the blank page</string>
+    <string name="browser_login_rejected">That isn\'t the address of the final page. It starts with https://remoteplay.dl.playstation.net</string>
+    <string name="browser_login_continue">Continue</string>
+    <string name="immersive_hint">PS button or Menu: screen controls  ·  Hold L1 + R1 + Options to disconnect</string>
+    <string name="bar_save_preset">+ Save this screen</string>
+    <string name="bar_remove_preset">Remove %1$s</string>
+    <string name="bar_preset_base">Screen</string>
+    <string name="bar_size">SIZE</string>
+    <string name="bar_distance">DISTANCE</string>
+    <string name="bar_shape">SHAPE</string>
+    <string name="bar_shape_flat">Flat</string>
+    <string name="bar_shape_curved">Curved</string>
+    <string name="bar_background">BACKGROUND</string>
+    <string name="bar_background_room">Room</string>
+    <string name="bar_background_dark">Dark</string>
+    <string name="bar_leave">Disconnect</string>
+    <string name="bar_close">Close</string>
+    <string name="bar_position">POSITION</string>
+    <string name="bar_position_fixed">Stays put</string>
+    <string name="bar_position_follow">Follows me</string>
+    <string name="bar_reset_presets">Restore defaults</string>
+    <string name="bar_reset_confirm">Confirm?</string>
+</resources>

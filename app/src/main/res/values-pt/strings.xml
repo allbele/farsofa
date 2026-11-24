@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cancel">Cancelar</string>
+
+    <string name="welcome_body">Jogue seu console em uma tela grande dentro do headset. Entre uma vez e o console aparece sozinho.</string>
+    <string name="welcome_sign_in">Entrar na PlayStation Network</string>
+    <string name="sign_in_failed">O login não foi concluído. Verifique a conexão e tente de novo.</string>
+    <string name="sign_out">Sair da conta</string>
+    <string name="login_title">Entrar na PlayStation Network</string>
+
+    <string name="consoles_title">Seus consoles</string>
+    <string name="consoles_searching">Procurando consoles nesta rede…</string>
+    <string name="consoles_searching_hint">Ligue o console ou deixe-o em modo de repouso, na mesma rede Wi-Fi do headset.</string>
+    <string name="console_ready">Ligado</string>
+    <string name="console_standby">Em modo de repouso</string>
+    <string name="console_offline">Fora desta rede</string>
+    <string name="console_waking">Ligando…</string>
+    <string name="console_pair">Parear</string>
+    <string name="console_play">Jogar</string>
+    <string name="console_wake_and_play">Ligar e jogar</string>
+    <string name="console_forget">Esquecer</string>
+    <string name="wake_timeout">O console não ligou. Ligue-o e tente de novo.</string>
+
+    <string name="pair_title">Parear com %1$s</string>
+    <string name="pair_steps">No console, abra Configurações › Sistema › Uso Remoto › Vincular Dispositivo e digite aqui o código de 8 dígitos exibido.</string>
+    <string name="pair_code_label">Código de 8 dígitos</string>
+    <string name="pair_failed">O pareamento não funcionou. Confira o código, veja se o console está na mesma conta e tente de novo.</string>
+
+    <string name="stream_connecting">Conectando…</string>
+    <string name="stream_exit_hint">Segure L1 + R1 + Options para desconectar</string>
+    <string name="stream_failed_start">Não foi possível iniciar a conexão.</string>
+    <string name="stream_ended_error">A conexão terminou: %1$s</string>
+    <string name="stream_login_pin_title">Digite a senha de login do console</string>
+    <string name="stream_login_pin_incorrect">Senha incorreta. Tente de novo</string>
+    <string name="immersive_failed">Não foi possível iniciar a tela imersiva.</string>
+    <string name="immersive_login_pin">Este console pede uma senha de login, que a tela imersiva ainda não consegue mostrar. Desative a senha no console e tente de novo.</string>
+    <string name="welcome_browser_sign_in">A página de login não carrega? Entre pelo navegador</string>
+    <string name="browser_login_title">Entrar pelo navegador</string>
+    <string name="browser_login_step_1">1. Abra a página de login no navegador e entre. Ao terminar, você cai em uma página em branco.</string>
+    <string name="browser_login_open">Abrir o navegador</string>
+    <string name="browser_login_step_2">2. Copie o endereço dessa página em branco na barra de endereços e cole aqui.</string>
+    <string name="browser_login_address_label">Endereço da página em branco</string>
+    <string name="browser_login_rejected">Esse não é o endereço da página final. Ele começa com https://remoteplay.dl.playstation.net</string>
+    <string name="browser_login_continue">Continuar</string>
+    <string name="immersive_hint">Botão PS ou Menu: ajustes da tela  ·  Segure L1 + R1 + Options para desconectar</string>
+    <string name="bar_save_preset">+ Salvar esta tela</string>
+    <string name="bar_remove_preset">Remover %1$s</string>
+    <string name="bar_preset_base">Tela</string>
+    <string name="bar_size">TAMANHO</string>
+    <string name="bar_distance">DISTÂNCIA</string>
+    <string name="bar_shape">FORMATO</string>
+    <string name="bar_shape_flat">Plana</string>
+    <string name="bar_shape_curved">Curva</string>
+    <string name="bar_background">FUNDO</string>
+    <string name="bar_background_room">Sala</string>
+    <string name="bar_background_dark">Escuro</string>
+    <string name="bar_leave">Desconectar</string>
+    <string name="bar_close">Fechar</string>
+    <string name="bar_position">POSIÇÃO</string>
+    <string name="bar_position_fixed">Fixa</string>
+    <string name="bar_position_follow">Me segue</string>
+    <string name="bar_reset_presets">Restaurar padrões</string>
+    <string name="bar_reset_confirm">Confirmar?</string>
+</resources>

@@ -119,9 +119,9 @@
     <string name="bar_option_on">On</string>
     <string name="bar_option_off">Off</string>
     <string name="stream_connecting_remote">Connecting over the internet… this can take up to a minute</string>
-    <string name="consoles_local">On this network</string>
-    <string name="consoles_remote">Over the internet</string>
-    <string name="consoles_remote_hint">For playing away from home. The console must be on, or in rest mode with \"Stay Connected to the Internet\" enabled.</string>
+    <string name="consoles_local">On this network (best picture, least delay)</string>
+    <string name="consoles_remote">Over the internet (more delay)</string>
+    <string name="consoles_remote_hint">For playing away from home. The picture is less sharp and the controls answer a little later than at home. The console must be on, or in rest mode with \"Stay Connected to the Internet\" enabled.</string>
     <string name="consoles_remote_loading">Asking PlayStation Network for your consoles…</string>
     <string name="consoles_remote_empty">No console on this account has Remote Play enabled.</string>
     <string name="consoles_remote_error">Could not reach PlayStation Network (%1$s).</string>
@@ -140,4 +140,5 @@
         <item>On this network: when the console shows up here, choose Pair. On the console open Settings › System › Remote Play › Link Device and type the 8-digit code it shows.</item>
         <item>Away from home there is no code: the console appears under \"Over the internet\" by itself.</item>
     </string-array>
+    <string name="consoles_local_hint">Use this at home, with the headset on the same Wi-Fi as the console.</string>
 </resources>

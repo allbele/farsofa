@@ -118,9 +118,9 @@
     <string name="bar_option_on">Ligado</string>
     <string name="bar_option_off">Desligado</string>
     <string name="stream_connecting_remote">Conectando pela internet… pode levar até um minuto</string>
-    <string name="consoles_local">Nesta rede</string>
-    <string name="consoles_remote">Pela internet</string>
-    <string name="consoles_remote_hint">Para jogar fora de casa. O console precisa estar ligado, ou em repouso com \"Permanecer conectado à internet\" ativado.</string>
+    <string name="consoles_local">Nesta rede (melhor imagem, menos atraso)</string>
+    <string name="consoles_remote">Pela internet (mais atraso)</string>
+    <string name="consoles_remote_hint">Para jogar fora de casa. A imagem fica menos nítida e os comandos respondem um pouco depois do que em casa. O console precisa estar ligado, ou em repouso com \"Permanecer conectado à internet\" ativado.</string>
     <string name="consoles_remote_loading">Consultando seus consoles na PlayStation Network…</string>
     <string name="consoles_remote_empty">Nenhum console desta conta tem o Uso Remoto ativado.</string>
     <string name="consoles_remote_error">Não foi possível falar com a PlayStation Network (%1$s).</string>
@@ -139,4 +139,5 @@
         <item>Nesta rede: quando o console aparecer aqui, escolha Parear. No console, abra Configurações › Sistema › Uso Remoto › Vincular Dispositivo e digite o código de 8 dígitos exibido.</item>
         <item>Fora de casa não há código: o console aparece sozinho em \"Pela internet\".</item>
     </string-array>
+    <string name="consoles_local_hint">Use esta em casa, com o headset no mesmo Wi-Fi do console.</string>
 </resources>

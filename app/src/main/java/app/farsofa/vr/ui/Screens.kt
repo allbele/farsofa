@@ -276,7 +276,7 @@ fun ConsoleListScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { SectionTitle(stringResource(R.string.consoles_local), null) }
+                    Column(Modifier.weight(1f)) { SectionTitle(stringResource(R.string.consoles_local), stringResource(R.string.consoles_local_hint)) }
                     TextButton(onClick = { guideOpen = true }) { Text(stringResource(R.string.guide_open)) }
                 }
             }

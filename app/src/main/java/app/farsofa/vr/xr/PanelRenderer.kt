@@ -143,6 +143,46 @@ class PanelRenderer(private val context: Context) {
             if (cursor != null) cursor(canvas, cursor.first, cursor.second)
         }
 
+    /** The options: a line of explanation, a switch for each, and the way back. [values] says which are on. */
+    fun drawOptions(surface: Surface, pad: OptionsPad, values: BooleanArray, highlighted: BarItem?, pressed: Boolean, cursor: Pair<Float, Float>?) =
+        draw(surface, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT) { canvas ->
+            panel(canvas, 0f, 0f, Scene.BAR_PX_WIDTH.toFloat(), Scene.BAR_PX_HEIGHT.toFloat())
+            text.textSize = 32f
+            text.color = MUTED
+            text.textAlign = Paint.Align.LEFT
+            canvas.drawText(string(R.string.bar_options_hint), pad.prompt.left + 12f, pad.prompt.centerY + 11f, text)
+            text.textAlign = Paint.Align.CENTER
+
+            val captions = intArrayOf(
+                R.string.bar_option_triggers, R.string.bar_option_lights, R.string.bar_option_motion,
+                R.string.bar_option_haptics, R.string.bar_option_smooth,
+            )
+            for (item in pad.items) {
+                val action = item.action
+                val isHighlighted = item == highlighted
+                val isOn = action is BarAction.ToggleOption && values.getOrElse(action.index) { false }
+                fill.color = when {
+                    isHighlighted && pressed -> ACCENT
+                    isOn -> ACCENT_DIM
+                    isHighlighted -> CONTROL_HOVER
+                    else -> CONTROL
+                }
+                rect.set(item.box.left, item.box.top, item.box.right, item.box.bottom)
+                canvas.drawRoundRect(rect, CORNER, CORNER, fill)
+                if (isHighlighted) {
+                    stroke.color = ACCENT
+                    stroke.strokeWidth = 4f
+                    canvas.drawRoundRect(rect, CORNER, CORNER, stroke)
+                }
+                if (action is BarAction.ToggleOption) {
+                    captioned(canvas, item.box, string(captions[action.index]), string(if (isOn) R.string.bar_option_on else R.string.bar_option_off))
+                } else {
+                    label(canvas, item.box, string(R.string.bar_options_back), 34f, TEXT)
+                }
+            }
+            if (cursor != null) cursor(canvas, cursor.first, cursor.second)
+        }
+
     /** A single line of help shown where the bar would be. */
     fun drawHint(surface: Surface, message: String) = draw(surface, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT) { canvas ->
         text.textSize = 40f
@@ -206,6 +246,7 @@ class PanelRenderer(private val context: Context) {
         BarAction.SavePreset -> string(R.string.bar_save_preset)
         BarAction.Leave -> string(R.string.bar_leave)
         BarAction.Close -> string(R.string.bar_close)
+        BarAction.OpenOptions -> string(R.string.bar_options)
         is BarAction.Press -> when (action.buttons) {
             PadState.DPAD_LEFT -> "◀"
             PadState.DPAD_UP -> "▲"

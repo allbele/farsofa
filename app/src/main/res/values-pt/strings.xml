@@ -99,7 +99,7 @@
         <item>Analógico direito: para a direita</item>
         <item>Analógico direito: para baixo</item>
     </string-array>
-    <string name="pad_learn_open">Configurar outro controle</string>
+    <string name="pad_learn_open">Configurar controle</string>
     <string name="pad_learn_title">Botões do controle</string>
     <string name="pad_learn_waiting">Aperte qualquer botão do controle que você quer configurar.</string>
     <string name="pad_learn_prompt">No seu controle, aperte:</string>
@@ -107,4 +107,14 @@
     <string name="pad_learn_skip">Pular este</string>
     <string name="pad_learn_reset">Voltar ao padrão</string>
     <string name="pad_learn_done">Pronto. Este controle fica guardado.</string>
+    <string name="bar_options">Opções</string>
+    <string name="bar_options_back">Voltar</string>
+    <string name="bar_options_hint">As mudanças valem na hora. O movimento suave começa no próximo jogo.</string>
+    <string name="bar_option_triggers">GATILHOS</string>
+    <string name="bar_option_lights">LUZES</string>
+    <string name="bar_option_motion">MOVIMENTO</string>
+    <string name="bar_option_haptics">VIBRAÇÃO FINA</string>
+    <string name="bar_option_smooth">MOV. SUAVE</string>
+    <string name="bar_option_on">Ligado</string>
+    <string name="bar_option_off">Desligado</string>
 </resources>

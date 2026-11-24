@@ -100,7 +100,7 @@
         <item>Right stick: push right</item>
         <item>Right stick: push down</item>
     </string-array>
-    <string name="pad_learn_open">Set up another gamepad</string>
+    <string name="pad_learn_open">Set up a gamepad</string>
     <string name="pad_learn_title">Gamepad buttons</string>
     <string name="pad_learn_waiting">Press any button on the gamepad you want to set up.</string>
     <string name="pad_learn_prompt">On your gamepad, press:</string>
@@ -108,4 +108,14 @@
     <string name="pad_learn_skip">Skip this one</string>
     <string name="pad_learn_reset">Back to standard</string>
     <string name="pad_learn_done">All set. This gamepad will be remembered.</string>
+    <string name="bar_options">Options</string>
+    <string name="bar_options_back">Back</string>
+    <string name="bar_options_hint">Changes apply at once. Smooth motion starts with the next game.</string>
+    <string name="bar_option_triggers">TRIGGERS</string>
+    <string name="bar_option_lights">LIGHTS</string>
+    <string name="bar_option_motion">MOTION</string>
+    <string name="bar_option_haptics">FINE HAPTICS</string>
+    <string name="bar_option_smooth">SMOOTH MOTION</string>
+    <string name="bar_option_on">On</string>
+    <string name="bar_option_off">Off</string>
 </resources>

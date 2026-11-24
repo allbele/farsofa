@@ -97,6 +97,30 @@ class DualSenseLink(context: Context) {
         if (haptics) hapticsWorker = Thread({ runHaptics() }, "farsofa-haptics").also { it.start() }
     }
 
+    /** Applies a change of options to a link that may or may not be running yet. */
+    fun configure(triggers: Boolean, lights: Boolean, haptics: Boolean) {
+        if (!running) {
+            if (triggers || lights || haptics) start(triggers, lights, haptics)
+            return
+        }
+        synchronized(lock) {
+            triggersEnabled = triggers
+            triggersPending = true
+            if (lights && !lightsEnabled && player == null) player = 0
+            lightsPending = lights
+            lightsEnabled = lights
+            lock.notifyAll()
+        }
+        if (haptics == hapticsWanted) return
+        hapticsWanted = haptics
+        if (haptics) {
+            hapticsWorker = Thread({ runHaptics() }, "farsofa-haptics").also { it.start() }
+        } else {
+            hapticsWorker?.interrupt()
+            hapticsWorker = null
+        }
+    }
+
     /** Lets go of the triggers and the motors, then closes. Returns once that is done or a second has passed. */
     fun stop() {
         if (!running) return

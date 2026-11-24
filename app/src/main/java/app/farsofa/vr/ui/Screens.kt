@@ -2,6 +2,11 @@
 
 package app.farsofa.vr.ui
 
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.Canvas
 import app.farsofa.vr.input.PadMapping
 import androidx.compose.ui.res.stringArrayResource
 import app.farsofa.vr.input.PadPrefs
@@ -248,6 +253,7 @@ fun ConsoleListScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
+            TextButton(onClick = onLearnPad) { Text(stringResource(R.string.pad_learn_open)) }
             TextButton(onClick = { controllerOpen = true }) { Text(stringResource(R.string.controller_title)) }
             TextButton(onClick = onSignOut) { Text(stringResource(R.string.sign_out)) }
         }
@@ -392,6 +398,70 @@ fun ControllerDialog(onDismiss: () -> Unit, onLearnPad: () -> Unit) {
 }
 
 /**
+ * A gamepad seen from above, with the control being asked for lit up. [target] is a button's bit
+ * number, a trigger or a stick direction, as in [PadMapping].
+ */
+@Composable
+fun PadPicture(target: Int, modifier: Modifier = Modifier) {
+    val body = MaterialTheme.colorScheme.surface
+    val part = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    val lit = Accent
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        fun colour(vararg targets: Int) = if (target in targets) lit else part
+        fun pill(x: Float, y: Float, pw: Float, ph: Float, vararg targets: Int) =
+            drawRoundRect(colour(*targets), Offset(x * w, y * h), Size(pw * w, ph * h), CornerRadius(ph * h / 2))
+
+        // Triggers and shoulder buttons, peeking out above the body.
+        pill(0.12f, 0.02f, 0.16f, 0.10f, PadMapping.L2)
+        pill(0.72f, 0.02f, 0.16f, 0.10f, PadMapping.R2)
+        pill(0.10f, 0.14f, 0.20f, 0.08f, 8)
+        pill(0.70f, 0.14f, 0.20f, 0.08f, 9)
+        drawRoundRect(body, Offset(0.04f * w, 0.20f * h), Size(0.92f * w, 0.72f * h), CornerRadius(0.22f * h))
+
+        // D-pad on the left: left, right, up, down.
+        val pad = 0.045f * w
+        val dx = 0.20f * w
+        val dy = 0.44f * h
+        drawRect(colour(4), Offset(dx - 1.5f * pad, dy - pad / 2), Size(pad, pad))
+        drawRect(colour(5), Offset(dx + 0.5f * pad, dy - pad / 2), Size(pad, pad))
+        drawRect(colour(6), Offset(dx - pad / 2, dy - 1.5f * pad), Size(pad, pad))
+        drawRect(colour(7), Offset(dx - pad / 2, dy + 0.5f * pad), Size(pad, pad))
+
+        // Face buttons on the right: cross below, circle right, square left, triangle above.
+        val fx = 0.80f * w
+        val r = 0.028f * w
+        drawCircle(colour(0), r, Offset(fx, dy + 2.2f * r))
+        drawCircle(colour(1), r, Offset(fx + 2.2f * r, dy))
+        drawCircle(colour(2), r, Offset(fx - 2.2f * r, dy))
+        drawCircle(colour(3), r, Offset(fx, dy - 2.2f * r))
+
+        // Create, touchpad, options, PS in the middle.
+        pill(0.31f, 0.30f, 0.035f, 0.10f, 13)
+        drawRoundRect(colour(14), Offset(0.36f * w, 0.27f * h), Size(0.28f * w, 0.24f * h), CornerRadius(0.03f * h))
+        pill(0.655f, 0.30f, 0.035f, 0.10f, 12)
+        drawCircle(colour(15), 0.022f * w, Offset(0.5f * w, 0.62f * h))
+
+        // Sticks; pressing one is L3 or R3, and a push is shown as a dot in that direction.
+        val stick = 0.062f * w
+        val sy = 0.72f * h
+        for ((cx, press, pushX, pushY) in listOf(
+            listOf(0.36f * w, 10f, PadMapping.LEFT_X.toFloat(), PadMapping.LEFT_Y.toFloat()),
+            listOf(0.64f * w, 11f, PadMapping.RIGHT_X.toFloat(), PadMapping.RIGHT_Y.toFloat()),
+        )) {
+            val pushed = target == pushX.toInt() || target == pushY.toInt()
+            drawCircle(if (target == press.toInt()) lit else part, stick, Offset(cx, sy))
+            if (pushed) {
+                drawCircle(lit, stick, Offset(cx, sy), style = Stroke(width = 0.012f * w))
+                val offset = if (target == pushX.toInt()) Offset(stick * 0.55f, 0f) else Offset(0f, stick * 0.55f)
+                drawCircle(lit, stick * 0.38f, Offset(cx, sy) + offset)
+            }
+        }
+    }
+}
+
+/**
  * Asks for the gamepad's controls one by one. The gamepad's own events are taken by the activity
  * while this is open, so the buttons here are for the headset's pointer.
  */
@@ -411,6 +481,8 @@ fun PadLearnDialog(
                 if (finished) {
                     Text(stringResource(R.string.pad_learn_done), fontSize = 20.sp)
                 } else {
+                    PadPicture(target, Modifier.fillMaxWidth().height(190.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(stringResource(R.string.pad_learn_prompt), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(names.getOrElse(target) { "" }, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))

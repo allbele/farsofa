@@ -87,6 +87,35 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     private var lastRumbleTime = 0L
     private val rumbleWatchdog = Runnable { lastRumble = 0; stopRumble() }
 
+    /** The options a player can change mid-game, in the order the options pad shows them. */
+    fun options(): BooleanArray =
+        booleanArrayOf(padPrefs.triggers, padPrefs.lights, padPrefs.motion, padPrefs.fineHaptics, padPrefs.smoothMotion)
+
+    /** Flips one option and applies it at once where that is possible (smooth motion waits for the next game). */
+    fun toggleOption(index: Int) {
+        when (index) {
+            0 -> padPrefs.triggers = !padPrefs.triggers
+            1 -> padPrefs.lights = !padPrefs.lights
+            2 -> padPrefs.motion = !padPrefs.motion
+            3 -> padPrefs.fineHaptics = !padPrefs.fineHaptics
+            4 -> padPrefs.smoothMotion = !padPrefs.smoothMotion
+        }
+        Diagnostics.event("option $index toggled")
+        val session = ptr
+        if (session == 0L) return
+        padLink.configure(triggers = padPrefs.triggers, lights = padPrefs.lights, haptics = padPrefs.fineHaptics)
+        handler.removeCallbacks(padTick)
+        handler.post(padTick)
+        if (padPrefs.motion) {
+            padMotion.start()
+        } else {
+            padMotion.stop()
+            padTouch.release()
+            Native.sessionClearMotion(session)
+            publish()
+        }
+    }
+
     /** Whether the controller's touchpad fingers are wanted, which needs the window to capture the pointer. */
     val wantsPointerCapture: Boolean get() = padPrefs.motion
 

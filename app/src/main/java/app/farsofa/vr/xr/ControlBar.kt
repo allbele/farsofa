@@ -27,6 +27,13 @@ sealed interface BarAction {
     data object Leave : BarAction
     data object Close : BarAction
 
+    /** Switches the bar to the controller and picture options, and back. */
+    data object OpenOptions : BarAction
+    data object CloseOptions : BarAction
+
+    /** Flips one of the options, by its place in [OptionsPad.OPTIONS]. */
+    data class ToggleOption(val index: Int) : BarAction
+
     /** Taps a console button the Touch controllers have no key for. */
     data class Press(val buttons: Int) : BarAction
 
@@ -112,8 +119,8 @@ class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) : Panel() {
         val console = listOf(
             PadState.DPAD_LEFT, PadState.DPAD_UP, PadState.DPAD_DOWN, PadState.DPAD_RIGHT,
             PadState.SHARE, PadState.TOUCHPAD, PadState.PS, PadState.OPTIONS,
-        ).map<Int, BarAction> { BarAction.Press(it) } + BarAction.Close
-        split(listOf(1f, 1f, 1f, 1f, 1.7f, 1.7f, 1.7f, 1.7f, 1.7f)).forEachIndexed { index, (left, right) ->
+        ).map<Int, BarAction> { BarAction.Press(it) } + BarAction.OpenOptions + BarAction.Close
+        split(listOf(1f, 1f, 1f, 1f, 1.7f, 1.7f, 1.7f, 1.7f, 1.7f, 1.7f)).forEachIndexed { index, (left, right) ->
             built += BarItem(console[index], 2, Box(left, ROW_TOPS[2], right, ROW_TOPS[2] + ROW_HEIGHTS[2]))
         }
 
@@ -155,6 +162,39 @@ class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) : Panel() {
             while (presets.any { it.name.equals("$base $number", ignoreCase = true)}) number++
             return "$base $number"
         }
+    }
+}
+
+/**
+ * The options a player may want to change without leaving the game, drawn where the control bar goes:
+ * a line of explanation, one switch per option, and the way back.
+ */
+class OptionsPad : Panel() {
+    override val items: List<BarItem>
+
+    val prompt = Box(ControlBar.PADDING, ControlBar.ROW_TOPS[0], Scene.BAR_PX_WIDTH - ControlBar.PADDING, ControlBar.ROW_TOPS[0] + ControlBar.ROW_HEIGHTS[0])
+
+    init {
+        val built = mutableListOf<BarItem>()
+        val inner = Scene.BAR_PX_WIDTH - 2 * ControlBar.PADDING
+        val width = (inner - ControlBar.GAP * (OPTIONS - 1)) / OPTIONS
+        val top = ControlBar.ROW_TOPS[1]
+        for (index in 0 until OPTIONS) {
+            val left = ControlBar.PADDING + index * (width + ControlBar.GAP)
+            built += BarItem(BarAction.ToggleOption(index), 1, Box(left, top, left + width, top + ControlBar.ROW_HEIGHTS[1]))
+        }
+        val bottomTop = ControlBar.ROW_TOPS[2]
+        built += BarItem(
+            BarAction.CloseOptions, 2,
+            Box(ControlBar.PADDING, bottomTop, Scene.BAR_PX_WIDTH - ControlBar.PADDING, bottomTop + ControlBar.ROW_HEIGHTS[2]),
+        )
+        items = built
+    }
+
+    companion object {
+        /** Triggers, lights, motion, detailed haptics, smooth motion: in that order. */
+        const val OPTIONS = 5
+        const val SMOOTH_MOTION = 4
     }
 }
 

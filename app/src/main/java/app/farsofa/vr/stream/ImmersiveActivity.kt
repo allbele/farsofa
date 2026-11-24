@@ -26,6 +26,7 @@ import app.farsofa.vr.xr.BarItem
 import app.farsofa.vr.xr.ControlBar
 import app.farsofa.vr.xr.Panel
 import app.farsofa.vr.xr.PanelRenderer
+import app.farsofa.vr.xr.OptionsPad
 import app.farsofa.vr.xr.PinPad
 import app.farsofa.vr.xr.Ray
 import app.farsofa.vr.xr.Scene
@@ -87,9 +88,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     // While the console waits for its login passcode, the pad takes the bar's place.
     private var pinPad: PinPad? = null
+    private var optionsPad: OptionsPad? = null
     private var pinDigits = ""
     private var pinIncorrect = false
-    private val panel: Panel get() = pinPad ?: bar
+    private val panel: Panel get() = pinPad ?: optionsPad ?: bar
     private var placement = Scene.placeBar(layout, allowLift = false)
 
     // Gamepad focus and pointer hover both highlight a control; the pointer wins while it is on the bar.
@@ -242,6 +244,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         val pad = pinPad
         if (mode == Mode.CONTROLS && pad != null) barSurface?.let {
             renderer.drawPin(it, pad, pinDigits.length, pinIncorrect, hover ?: focus, held != null || grab == Grab.Item, barCursor)
+        } else if (mode == Mode.CONTROLS && optionsPad != null) barSurface?.let {
+            renderer.drawOptions(it, optionsPad!!, stream.options(), hover ?: focus, held != null || grab == Grab.Item, barCursor)
         } else if (mode == Mode.CONTROLS) barSurface?.let {
             renderer.drawBar(
                 it, bar, presets, layout, follow, confirmingReset, hover ?: focus, held != null || grab == Grab.Item, barCursor,
@@ -258,7 +262,9 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         val focused = focus?.action
         bar = ControlBar(presets, layout)
         // The save slot turns into a remove slot and back, so the focused control may no longer exist.
-        focus = focused?.let { panel.find(it) ?: if (pinPad == null) bar.items.last { item -> item.row == 0 } else null }
+        focus = focused?.let {
+            panel.find(it) ?: if (pinPad == null && optionsPad == null) bar.items.last { item -> item.row == 0 } else null
+        }
         pushScene()
         drawPanels()
     }
@@ -291,6 +297,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private fun closeControls() {
         if (pinPad != null && pinDigits.length < PinPad.LENGTH) return // the console is still waiting
         pinPad = null
+        optionsPad = null
         Diagnostics.event("controls closed layout=$layout")
         stopHolding()
         mode = Mode.PLAYING
@@ -361,6 +368,17 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             }
             is BarAction.Press -> stream.tap(action.buttons)
             BarAction.Close -> closeControls()
+            BarAction.OpenOptions -> {
+                optionsPad = OptionsPad()
+                focus = if (focus != null) optionsPad?.items?.first() else null
+                hover = null
+            }
+            BarAction.CloseOptions -> {
+                optionsPad = null
+                focus = if (focus != null) bar.find(BarAction.OpenOptions) else null
+                hover = null
+            }
+            is BarAction.ToggleOption -> stream.toggleOption(action.index)
             BarAction.Leave -> leave(null)
         }
     }
@@ -636,7 +654,11 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
         if (released and PadState.CROSS != 0) stopHolding()
         when {
-            pressed and PadState.CIRCLE != 0 -> if (pinPad != null) perform(BarAction.Backspace) else closeControls()
+            pressed and PadState.CIRCLE != 0 -> when {
+                pinPad != null -> perform(BarAction.Backspace)
+                optionsPad != null -> perform(BarAction.CloseOptions)
+                else -> closeControls()
+            }
             pressed and PadState.CROSS != 0 -> focus?.let { startHolding(it.action) }
             pressed and PadState.DPAD_MASK != 0 -> {
                 val from = focus

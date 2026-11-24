@@ -9,18 +9,19 @@ compatibility.
 
 ## Status
 
-Early development. What exists today:
+Working on a Quest 3 with a PS5 on the local network:
 
 - Sign-in to PSN in the headset to get the account ID automatically.
-- Automatic discovery of consoles on the local network, pairing with the 8-digit code, wake from rest mode.
-- 1080p60 HEVC streaming in a flat panel, with gamepad input and rumble.
+- Automatic discovery of consoles on the local network and wake from rest mode.
+- 1080p60 HEVC streaming on an immersive OpenXR screen at 120 Hz: flat or curved, in passthrough or a
+  dark room, opened where the player is looking.
+- The screen is moved by a grip under it and resized by its corners, with Touch controllers or hands;
+  a control bar below it holds size, distance, saved presets and the console's login passcode pad.
+- A Bluetooth gamepad with vibration, or the Touch controllers as a gamepad.
 
-- An immersive OpenXR screen (flat or curved, room or dark background) with resize handles on its
-  corners, a control bar below it for size, distance and saved presets, and Touch controllers as a
-  fallback gamepad.
-
-Not built yet: play over the internet, the login passcode prompt in the immersive screen.
-None of the above has been tested on a headset yet.
+Known limits: adaptive triggers are not available (Android gives apps no way to send them to a
+Bluetooth controller), pairing with the console's 8-digit code has not been exercised on a headset
+yet, and play over the internet is not built.
 
 ## Layout
 

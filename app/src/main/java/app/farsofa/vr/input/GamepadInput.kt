@@ -45,8 +45,26 @@ class PadState {
  * Translates Android gamepad events into a [PadState]. Works for any controller Android exposes as a
  * standard gamepad, which is how a DualSense paired over Bluetooth shows up.
  */
-class GamepadInput(private val onChanged: (PadState) -> Unit) {
+class GamepadInput(private val mappings: PadMappingStore? = null, private val onChanged: (PadState) -> Unit) {
     val state = PadState()
+
+    // The player's own assignment for the gamepad in use, looked up once per device.
+    private var mappedDeviceId = Int.MIN_VALUE
+    private var mapping: PadMapping? = null
+    private val heldKeys = HashSet<Int>()
+    private val axisValues = HashMap<Int, Float>()
+
+    private fun mappingFor(device: InputDevice?): PadMapping? {
+        val id = device?.id ?: return null
+        if (id != mappedDeviceId) {
+            mappedDeviceId = id
+            mapping = mappings?.load(PadMappingStore.deviceKey(device.vendorId, device.productId))
+            heldKeys.clear()
+            axisValues.clear()
+            if (mapping != null) Log.i(TAG, "Using the player's own button assignment for ${device.name}")
+        }
+        return mapping
+    }
 
     private var keyButtons = 0
     private var hatButtons = 0
@@ -72,6 +90,15 @@ class GamepadInput(private val onChanged: (PadState) -> Unit) {
         if (event.deviceId != lastDeviceId) Log.i(TAG, "Input now from device ${event.deviceId} (${event.device?.name})")
         lastDeviceId = event.deviceId
         lastInputTime = event.eventTime
+        val custom = mappingFor(event.device)
+        if (custom != null) {
+            if (down) heldKeys += event.keyCode else heldKeys -= event.keyCode
+            // A key the player has given a new meaning loses its standard one.
+            if (custom.sources.values.any { it.key == event.keyCode }) {
+                publish()
+                return true
+            }
+        }
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_BUTTON_L2 -> keyL2 = down
@@ -79,6 +106,10 @@ class GamepadInput(private val onChanged: (PadState) -> Unit) {
             else -> {
                 val mask = buttonMask(event.keyCode)
                 if (mask == 0) {
+                    if (custom != null && custom.sources.values.any { it.key == event.keyCode }) {
+                        publish()
+                        return true
+                    }
                     if (down && event.repeatCount == 0) Log.d(TAG, "Unmapped key ${KeyEvent.keyCodeToString(event.keyCode)}")
                     return false
                 }
@@ -93,6 +124,11 @@ class GamepadInput(private val onChanged: (PadState) -> Unit) {
         if (!event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.action != MotionEvent.ACTION_MOVE) return false
         lastDeviceId = event.deviceId
         lastInputTime = event.eventTime
+        mappingFor(event.device)?.let { custom ->
+            for (source in custom.sources.values) {
+                if (source.axis >= 0) axisValues[source.axis] = event.getAxisValue(source.axis)
+            }
+        }
 
         state.leftX = stick(event.getAxisValue(MotionEvent.AXIS_X))
         state.leftY = stick(event.getAxisValue(MotionEvent.AXIS_Y))
@@ -118,6 +154,15 @@ class GamepadInput(private val onChanged: (PadState) -> Unit) {
         state.buttons = keyButtons or hatButtons
         state.l2 = if (axisL2 > 0) axisL2 else if (keyL2) 255 else 0
         state.r2 = if (axisR2 > 0) axisR2 else if (keyR2) 255 else 0
+        mapping?.let { custom ->
+            // The sticks are kept apart from the event's own reading so the assignment can replace them.
+            val sticks = intArrayOf(state.leftX, state.leftY, state.rightX, state.rightY)
+            custom.applyTo(state, { it in heldKeys }, { axisValues[it] ?: 0f })
+            if (PadMapping.LEFT_X !in custom.sources) state.leftX = sticks[0]
+            if (PadMapping.LEFT_Y !in custom.sources) state.leftY = sticks[1]
+            if (PadMapping.RIGHT_X !in custom.sources) state.rightX = sticks[2]
+            if (PadMapping.RIGHT_Y !in custom.sources) state.rightY = sticks[3]
+        }
         onChanged(state)
     }
 

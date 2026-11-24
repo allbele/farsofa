@@ -75,4 +75,36 @@
     <string name="controller_done">Pronto</string>
     <string name="option_smooth">Movimento suave (experimental)</string>
     <string name="option_smooth_detail">Cria quadros para um jogo de 30 fps se mover como 60. Movimento rápido pode tremer nas bordas.</string>
+    <string-array name="pad_controls">
+        <item>Cruz</item>
+        <item>Círculo</item>
+        <item>Quadrado</item>
+        <item>Triângulo</item>
+        <item>Direcional para a esquerda</item>
+        <item>Direcional para a direita</item>
+        <item>Direcional para cima</item>
+        <item>Direcional para baixo</item>
+        <item>L1</item>
+        <item>R1</item>
+        <item>L3 (aperte o analógico esquerdo)</item>
+        <item>R3 (aperte o analógico direito)</item>
+        <item>Options</item>
+        <item>Create</item>
+        <item>Clique do touchpad</item>
+        <item>PS</item>
+        <item>L2</item>
+        <item>R2</item>
+        <item>Analógico esquerdo: para a direita</item>
+        <item>Analógico esquerdo: para baixo</item>
+        <item>Analógico direito: para a direita</item>
+        <item>Analógico direito: para baixo</item>
+    </string-array>
+    <string name="pad_learn_open">Configurar outro controle</string>
+    <string name="pad_learn_title">Botões do controle</string>
+    <string name="pad_learn_waiting">Aperte qualquer botão do controle que você quer configurar.</string>
+    <string name="pad_learn_prompt">No seu controle, aperte:</string>
+    <string name="pad_learn_step">%1$d de %2$d</string>
+    <string name="pad_learn_skip">Pular este</string>
+    <string name="pad_learn_reset">Voltar ao padrão</string>
+    <string name="pad_learn_done">Pronto. Este controle fica guardado.</string>
 </resources>

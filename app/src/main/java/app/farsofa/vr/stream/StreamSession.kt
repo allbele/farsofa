@@ -60,7 +60,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "farsofa.stream")
         .apply { setReferenceCounted(false) }
 
-    private val gamepad = GamepadInput { publish() }
+    private val gamepad = GamepadInput(app.farsofa.vr.input.PadMappingStore(activity)) { publish() }
     private val touch = PadState()
 
     // What a DualSense offers beyond buttons and sticks.

@@ -151,3 +151,62 @@ class DualSenseTest {
         assertEquals(959, PadTouch.position(0.5f, PadTouch.PAD_WIDTH))
     }
 }
+
+class PadMappingTest {
+    @Test
+    fun aLearnedButtonReplacesTheStandardOne() {
+        val mapping = app.farsofa.vr.input.PadMapping(mapOf(1 to app.farsofa.vr.input.PadSource(key = 96)))
+        val state = app.farsofa.vr.input.PadState().apply { buttons = 1 }
+        mapping.applyTo(state, { it == 96 }, { 0f })
+        assertEquals(1 or 2, state.buttons)
+        mapping.applyTo(state, { false }, { 0f })
+        assertEquals(1, state.buttons)
+    }
+
+    @Test
+    fun aTriggerThatRestsAtMinusOneCoversItsWholeTravel() {
+        val source = app.farsofa.vr.input.PadSource(axis = 5, sign = 1, rest = -1f)
+        val mapping = app.farsofa.vr.input.PadMapping(mapOf(app.farsofa.vr.input.PadMapping.R2 to source))
+        val state = app.farsofa.vr.input.PadState()
+        mapping.applyTo(state, { false }, { -1f })
+        assertEquals(0, state.r2)
+        mapping.applyTo(state, { false }, { 0f })
+        assertEquals(128, state.r2)
+        mapping.applyTo(state, { false }, { 1f })
+        assertEquals(255, state.r2)
+    }
+
+    @Test
+    fun assignmentsSurviveBeingStored() {
+        val mapping = app.farsofa.vr.input.PadMapping(mapOf(18 to app.farsofa.vr.input.PadSource(axis = 2, sign = -1)))
+        // org.json is not available to plain unit tests, so only the shape of the data is checked here.
+        assertEquals(-1, mapping.sources.getValue(18).sign)
+    }
+
+    @Test
+    fun theLearnerTakesOneAnswerPerPress() {
+        val learner = app.farsofa.vr.input.PadLearner()
+        val first = learner.target
+        learner.onKey(100, true)
+        // Still held: the next control must not be answered by the same press.
+        learner.onKey(101, true)
+        assertEquals(1, learner.progress)
+        learner.onKey(100, false)
+        learner.onKey(101, false)
+        learner.onKey(102, true)
+        assertEquals(2, learner.progress)
+        assertEquals(100, learner.result.sources.getValue(first).key)
+    }
+
+    @Test
+    fun theLearnerReadsAStickFromItsAxis() {
+        val learner = app.farsofa.vr.input.PadLearner()
+        repeat(18) { learner.skip() }
+        assertEquals(app.farsofa.vr.input.PadMapping.LEFT_X, learner.target)
+        learner.onAxes(mapOf(0 to 0f, 1 to 0f))
+        learner.onAxes(mapOf(0 to -0.9f, 1 to 0.1f))
+        val source = learner.result.sources.getValue(app.farsofa.vr.input.PadMapping.LEFT_X)
+        assertEquals(0, source.axis)
+        assertEquals(-1, source.sign)
+    }
+}

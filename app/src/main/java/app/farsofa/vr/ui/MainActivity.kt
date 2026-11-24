@@ -39,6 +39,12 @@ import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import app.farsofa.vr.input.DualSenseLink
 import app.farsofa.vr.input.PadPrefs
+import app.farsofa.vr.input.PadLearner
+import app.farsofa.vr.input.PadMappingStore
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
+import androidx.compose.runtime.mutableIntStateOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -199,11 +205,30 @@ class MainActivity : ComponentActivity() {
                         row.registered?.let { consoleStore.remove(it.id) }
                         registered = consoleStore.all()
                     },
+                    onLearnPad = {
+                        learnDevice = null
+                        learner = PadLearner()
+                    },
                     onSignOut = {
                         psnStore.save(null)
                         account = null
                     },
                 )
+                learner?.let { current ->
+                    PadLearnDialog(
+                        tick = learnTick,
+                        target = current.target,
+                        step = current.progress,
+                        deviceName = learnDevice?.name,
+                        finished = current.finished,
+                        onSkip = { current.skip(); afterLearningEvent(current) },
+                        onReset = {
+                            learnDevice?.let { PadMappingStore(this@MainActivity).clear(PadMappingStore.deviceKey(it.vendorId, it.productId)) }
+                            learner = null
+                        },
+                        onClose = { learner = null },
+                    )
+                }
                 pairing?.let { console ->
                     PairDialog(
                         console = console,
@@ -217,6 +242,50 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // --- Teaching the app an unusual gamepad ---
+
+    private var learner by mutableStateOf<PadLearner?>(null)
+    private var learnTick by mutableIntStateOf(0)
+    private var learnDevice: InputDevice? = null
+
+    private fun learning(device: InputDevice?): PadLearner? {
+        val current = learner ?: return null
+        if (device == null || !(device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK))) return null
+        // The first gamepad to answer is the one being taught; another one joining in would confuse it.
+        if (learnDevice == null) learnDevice = device
+        return if (learnDevice?.id == device.id) current else null
+    }
+
+    private fun afterLearningEvent(current: PadLearner) {
+        learnTick++
+        val device = learnDevice
+        if (current.finished && device != null) {
+            PadMappingStore(this).save(PadMappingStore.deviceKey(device.vendorId, device.productId), current.result)
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val current = learning(event.device) ?: return super.dispatchKeyEvent(event)
+        if (event.repeatCount == 0 && (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP)) {
+            current.onKey(event.keyCode, event.action == KeyEvent.ACTION_DOWN)
+            afterLearningEvent(current)
+        }
+        return true
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        val device = event.device
+        val current = (if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) learning(device) else null)
+            ?: return super.dispatchGenericMotionEvent(event)
+        if (event.action == MotionEvent.ACTION_MOVE && device != null) {
+            val values = device.motionRanges.filter { it.isFromSource(InputDevice.SOURCE_JOYSTICK) }
+                .associate { it.axis to event.getAxisValue(it.axis) }
+            current.onAxes(values)
+            afterLearningEvent(current)
+        }
+        return true
     }
 
     // Talking back to a DualSense needs the Bluetooth permission. It is asked for once, here in the

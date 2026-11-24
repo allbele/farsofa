@@ -2,6 +2,8 @@
 
 package app.farsofa.vr.ui
 
+import app.farsofa.vr.input.PadMapping
+import androidx.compose.ui.res.stringArrayResource
 import app.farsofa.vr.input.PadPrefs
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Switch
@@ -234,6 +236,7 @@ fun ConsoleListScreen(
     onPlay: (ConsoleRow) -> Unit,
     onPair: (ConsoleRow) -> Unit,
     onForget: (ConsoleRow) -> Unit,
+    onLearnPad: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     var controllerOpen by remember { mutableStateOf(false) }
@@ -248,7 +251,7 @@ fun ConsoleListScreen(
             TextButton(onClick = { controllerOpen = true }) { Text(stringResource(R.string.controller_title)) }
             TextButton(onClick = onSignOut) { Text(stringResource(R.string.sign_out)) }
         }
-        if (controllerOpen) ControllerDialog(onDismiss = { controllerOpen = false })
+        if (controllerOpen) ControllerDialog(onDismiss = { controllerOpen = false }, onLearnPad = { controllerOpen = false; onLearnPad() })
         Text(stringResource(R.string.streaming_notice), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         if (notice != null) {
             Spacer(Modifier.height(8.dp))
@@ -349,7 +352,7 @@ private fun ConsoleCard(
 
 /** What a DualSense does beyond buttons and sticks. Changes apply to the next game started. */
 @Composable
-fun ControllerDialog(onDismiss: () -> Unit) {
+fun ControllerDialog(onDismiss: () -> Unit, onLearnPad: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { PadPrefs(context) }
     var triggers by remember { mutableStateOf(prefs.triggers) }
@@ -384,6 +387,47 @@ fun ControllerDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.controller_done)) } },
+        dismissButton = { OutlinedButton(onClick = onLearnPad) { Text(stringResource(R.string.pad_learn_open)) } },
+    )
+}
+
+/**
+ * Asks for the gamepad's controls one by one. The gamepad's own events are taken by the activity
+ * while this is open, so the buttons here are for the headset's pointer.
+ */
+@Composable
+fun PadLearnDialog(
+    tick: Int, target: Int, step: Int, deviceName: String?, finished: Boolean,
+    onSkip: () -> Unit, onReset: () -> Unit, onClose: () -> Unit,
+) {
+    val names = stringArrayResource(R.array.pad_controls)
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.pad_learn_title)) },
+        text = {
+            Column {
+                // [tick] changes with every event, which is what brings this text up to date.
+                Text(deviceName ?: stringResource(R.string.pad_learn_waiting), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(bottom = if (tick >= 0) 12.dp else 12.dp))
+                if (finished) {
+                    Text(stringResource(R.string.pad_learn_done), fontSize = 20.sp)
+                } else {
+                    Text(stringResource(R.string.pad_learn_prompt), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(names.getOrElse(target) { "" }, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.pad_learn_step, step + 1, PadMapping.LEARN_ORDER.size), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            if (finished) Button(onClick = onClose) { Text(stringResource(R.string.controller_done)) }
+            else Button(onClick = onSkip) { Text(stringResource(R.string.pad_learn_skip)) }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onReset) { Text(stringResource(R.string.pad_learn_reset)) }
+                if (!finished) TextButton(onClick = onClose) { Text(stringResource(R.string.cancel)) }
+            }
+        },
     )
 }
 

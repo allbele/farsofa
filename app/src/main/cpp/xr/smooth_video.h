@@ -50,6 +50,10 @@ class SmoothVideo
 		bool CreateSurface(JNIEnv *env);
 		bool CreatePrograms();
 		void CreateHistory();
+		bool CreateMask();
+		void UpdateMask();
+		void Blend(GLuint target);
+		bool PredictionTakesEffect(float scale);
 		GLuint Acquire();
 		void Release();
 		void DrawVideo(GLuint target, bool write_history);
@@ -94,6 +98,20 @@ class SmoothVideo
 		int history_newest_ = -1;
 		int history_count_ = 0;
 		bool shown_predicted_ = false;
+
+		// Where the picture is moving. A prediction covers the whole picture, and in the parts that
+		// stand still (the map, the crosshair, text, fine static detail) it can only do harm, so the
+		// predicted picture is used where something moved between the last two real ones and the
+		// real picture everywhere else.
+		GLuint predicted_texture_ = 0;
+		GLuint mask_[2] = {0, 0};
+		GLuint mask_framebuffer_ = 0;
+		GLuint diff_program_ = 0;
+		GLuint dilate_program_ = 0;
+		GLuint blend_program_ = 0;
+		int mask_width_ = 0;
+		int mask_height_ = 0;
+		bool mask_ready_ = false;
 		bool drawn_once_ = false;
 
 		float recent_change_[3] = {0, 0, 0};

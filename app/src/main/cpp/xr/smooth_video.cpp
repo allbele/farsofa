@@ -83,6 +83,61 @@ void main()
 }
 )";
 
+// How much each spot changed between the last two real pictures: the largest change in brightness
+// among four points around it, so a thin moving edge is not missed between samples.
+const char *DIFF_SHADER = R"(#version 300 es
+precision highp float;
+uniform sampler2D uNew;
+uniform sampler2D uOld;
+uniform vec2 uPixel;
+in vec2 vUv;
+out vec4 oColor;
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+void main()
+{
+	float change = 0.0;
+	for(int i = 0; i < 4; i++)
+	{
+		vec2 at = vUv + vec2(float(i & 1) * 4.0 - 2.0, float(i >> 1) * 4.0 - 2.0) * uPixel;
+		change = max(change, abs(luma(texture(uNew, at).rgb) - luma(texture(uOld, at).rgb)));
+	}
+	oColor = vec4(change, 0.0, 0.0, 1.0);
+}
+)";
+
+// Spreads the moving areas outwards, so the leading edge of something that moves is inside them.
+const char *DILATE_SHADER = R"(#version 300 es
+precision highp float;
+uniform sampler2D uMask;
+uniform vec2 uPixel;
+in vec2 vUv;
+out vec4 oColor;
+void main()
+{
+	float change = 0.0;
+	for(int y = -2; y <= 2; y++)
+		for(int x = -2; x <= 2; x++)
+			change = max(change, texture(uMask, vUv + vec2(float(x), float(y)) * 2.0 * uPixel).r);
+	oColor = vec4(change, 0.0, 0.0, 1.0);
+}
+)";
+
+const char *BLEND_SHADER = R"(#version 300 es
+precision highp float;
+uniform sampler2D uReal;
+uniform sampler2D uPredicted;
+uniform sampler2D uMask;
+in vec2 vUv;
+out vec4 oColor;
+void main()
+{
+	float moving = smoothstep(0.03, 0.08, texture(uMask, vUv).r);
+	oColor = vec4(mix(texture(uReal, vUv).rgb, texture(uPredicted, vUv).rgb, moving), 1.0);
+}
+)";
+
+const float IDENTITY[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+
 int64_t now_ns()
 {
 	timespec time = {};
@@ -187,7 +242,12 @@ bool SmoothVideo::Create(JNIEnv *env, XrSession session, int width, int height)
 	if(has_gl_extension("GL_QCOM_frame_extrapolation"))
 		extrapolate_ = reinterpret_cast<ExtrapolateFn>(eglGetProcAddress("glExtrapolateTex2DQCOM"));
 	if(extrapolate_)
+	{
 		CreateHistory();
+		mask_ready_ = CreateMask();
+		if(!mask_ready_)
+			LOGE("No motion mask on this device; the whole picture is predicted");
+	}
 	LOGI("Smooth video ready: %dx%d, format 0x%x, frame prediction %s", width_, height_, format_,
 			extrapolate_ ? "available" : "not available on this device");
 
@@ -321,6 +381,135 @@ void SmoothVideo::CreateHistory()
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+bool SmoothVideo::CreateMask()
+{
+	diff_program_ = link(DIFF_SHADER);
+	dilate_program_ = link(DILATE_SHADER);
+	blend_program_ = link(BLEND_SHADER);
+	if(!diff_program_ || !dilate_program_ || !blend_program_)
+		return false;
+	mask_width_ = std::max(1, width_ / 8);
+	mask_height_ = std::max(1, height_ / 8);
+
+	// These draw textures as they are, with no decoder transform in the way.
+	for(GLuint program : {diff_program_, dilate_program_, blend_program_})
+	{
+		glUseProgram(program);
+		glUniformMatrix4fv(glGetUniformLocation(program, "uTransform"), 1, GL_FALSE, IDENTITY);
+	}
+	glUseProgram(diff_program_);
+	glUniform1i(glGetUniformLocation(diff_program_, "uNew"), 0);
+	glUniform1i(glGetUniformLocation(diff_program_, "uOld"), 1);
+	glUniform2f(glGetUniformLocation(diff_program_, "uPixel"), 1.0f / static_cast<float>(width_), 1.0f / static_cast<float>(height_));
+	glUseProgram(dilate_program_);
+	glUniform1i(glGetUniformLocation(dilate_program_, "uMask"), 0);
+	glUniform2f(glGetUniformLocation(dilate_program_, "uPixel"), 1.0f / static_cast<float>(mask_width_), 1.0f / static_cast<float>(mask_height_));
+	glUseProgram(blend_program_);
+	glUniform1i(glGetUniformLocation(blend_program_, "uReal"), 0);
+	glUniform1i(glGetUniformLocation(blend_program_, "uPredicted"), 1);
+	glUniform1i(glGetUniformLocation(blend_program_, "uMask"), 2);
+	glUseProgram(0);
+
+	glGenTextures(2, mask_);
+	for(GLuint texture : mask_)
+	{
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, mask_width_, mask_height_);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	glGenTextures(1, &predicted_texture_);
+	glBindTexture(GL_TEXTURE_2D, predicted_texture_);
+	glTexStorage2D(GL_TEXTURE_2D, 1, format_, width_, height_);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &mask_framebuffer_);
+	return true;
+}
+
+// Once per real picture, from the two remembered ones.
+void SmoothVideo::UpdateMask()
+{
+	if(!mask_ready_ || history_count_ < 2)
+		return;
+	int newest = history_newest_;
+	glBindFramebuffer(GL_FRAMEBUFFER, mask_framebuffer_);
+	glViewport(0, 0, mask_width_, mask_height_);
+	glDisable(GL_BLEND);
+	glBindVertexArray(vertex_array_);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mask_[0], 0);
+	glUseProgram(diff_program_);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, history_[newest]);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, history_[1 - newest]);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mask_[1], 0);
+	glUseProgram(dilate_program_);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, mask_[0]);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// The real picture where nothing moved, the predicted one where something did.
+void SmoothVideo::Blend(GLuint target)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target, 0);
+	const GLenum one = GL_COLOR_ATTACHMENT0;
+	glDrawBuffers(1, &one);
+	glViewport(0, 0, width_, height_);
+	glDisable(GL_BLEND);
+	glUseProgram(blend_program_);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, history_[history_newest_]);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, predicted_texture_);
+	glActiveTexture(GL_TEXTURE2);
+	glBindTexture(GL_TEXTURE_2D, mask_[1]);
+	glBindVertexArray(vertex_array_);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glActiveTexture(GL_TEXTURE0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// The graphics chip reports no error when it declines to predict; it just leaves the output alone.
+// So the output is painted a colour no game picture is made of, a prediction is asked for, and one
+// spot is read back: if the paint is still there, nothing happened.
+bool SmoothVideo::PredictionTakesEffect(float scale)
+{
+	int newest = history_newest_;
+	glBindFramebuffer(GL_FRAMEBUFFER, mask_framebuffer_);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, predicted_texture_, 0);
+	glViewport(0, 0, width_, height_);
+	glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	while(glGetError() != GL_NO_ERROR) { }
+	extrapolate_(history_[1 - newest], history_[newest], predicted_texture_, scale);
+	GLenum error = glGetError();
+	uint8_t pixel[4] = {0, 0, 0, 0};
+	glReadPixels(width_ / 2, height_ / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	bool untouched = pixel[0] > 250 && pixel[1] < 5 && pixel[2] > 250;
+	if(error != GL_NO_ERROR || untouched)
+	{
+		LOGE("Frame prediction does nothing here (error 0x%x, output %s); showing real frames only", error,
+				untouched ? "untouched" : "changed");
+		return false;
+	}
+	LOGI("Frame prediction is working, with the motion mask");
+	return true;
+}
+
 void SmoothVideo::Destroy(JNIEnv *env)
 {
 	if(surface_)
@@ -338,6 +527,15 @@ void SmoothVideo::Destroy(JNIEnv *env)
 	transform_array_ = nullptr;
 
 	glDeleteTextures(2, history_);
+	glDeleteTextures(2, mask_);
+	glDeleteTextures(1, &predicted_texture_);
+	glDeleteFramebuffers(1, &mask_framebuffer_);
+	glDeleteProgram(diff_program_);
+	glDeleteProgram(dilate_program_);
+	glDeleteProgram(blend_program_);
+	mask_[0] = mask_[1] = predicted_texture_ = mask_framebuffer_ = 0;
+	diff_program_ = dilate_program_ = blend_program_ = 0;
+	mask_ready_ = false;
 	glDeleteTextures(1, &grid_texture_);
 	glDeleteTextures(1, &external_texture_);
 	glDeleteFramebuffers(1, &framebuffer_);
@@ -532,6 +730,8 @@ void SmoothVideo::Render(JNIEnv *env)
 		{
 			DrawVideo(target, predicting);
 			Release();
+			if(predicting)
+				UpdateMask();
 			drawn_once_ = true;
 			shown_predicted_ = false;
 			reals_++;
@@ -542,7 +742,28 @@ void SmoothVideo::Render(JNIEnv *env)
 		double period = std::min(std::max(period_ns_, PERIOD_MIN_NS), PERIOD_MAX_NS);
 		float scale = static_cast<float>(static_cast<double>(now - real_time_ns_) / period);
 		bool predict = predicting && history_count_ >= 2 && moving_ && pair_adjacent_ && scale > 0.05f && scale <= 1.0f;
-		if(predict)
+		if(predict && mask_ready_)
+		{
+			if(!extrapolate_checked_)
+			{
+				extrapolate_checked_ = true;
+				if(!PredictionTakesEffect(scale))
+					extrapolate_ = nullptr;
+			}
+			if(extrapolate_)
+			{
+				extrapolate_(history_[1 - history_newest_], history_[history_newest_], predicted_texture_, scale);
+				GLuint target = Acquire();
+				if(target)
+				{
+					Blend(target);
+					Release();
+					shown_predicted_ = true;
+					predicted_++;
+				}
+			}
+		}
+		else if(predict)
 		{
 			GLuint target = Acquire();
 			if(target)

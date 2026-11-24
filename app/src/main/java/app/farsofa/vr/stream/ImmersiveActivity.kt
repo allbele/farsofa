@@ -3,6 +3,9 @@
 package app.farsofa.vr.stream
 
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.graphics.BitmapFactory
+import android.graphics.Rect
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -56,6 +59,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private val handler = Handler(Looper.getMainLooper())
     private var xr = 0L
     private var leaving = false
+    private var demo = false
 
     private var layout = ScreenLayout()
     private var presets = emptyList<ScreenPreset>()
@@ -140,7 +144,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         bar = ControlBar(presets, layout)
 
         stream = StreamSession(this, intent, this)
-        if (!stream.isOpen) {
+        // Test builds can open the screen with a picture of our own instead of a console, which is how
+        // the store screenshots are taken without showing anyone else's game.
+        demo = intent.getBooleanExtra(EXTRA_DEMO, false) && applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!stream.isOpen && !demo) {
             leave(getString(R.string.stream_failed_start))
             return
         }
@@ -181,6 +188,17 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 )
                 finishAndRemoveTask()
             }
+        }
+    }
+
+    private fun drawDemoPicture(surface: Surface) {
+        try {
+            val picture = assets.open("demo.png").use { BitmapFactory.decodeStream(it) } ?: return
+            val canvas = surface.lockHardwareCanvas()
+            canvas.drawBitmap(picture, null, Rect(0, 0, canvas.width, canvas.height), null)
+            surface.unlockCanvasAndPost(canvas)
+        } catch (e: Exception) {
+            Diagnostics.event("demo picture unavailable: $e")
         }
     }
 
@@ -514,7 +532,9 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             barSurface = bar
             overlaySurface = overlay
             layout = fit(layout)
-            if (!stream.attachSurface(video)) {
+            if (demo) {
+                drawDemoPicture(video)
+            } else if (!stream.attachSurface(video)) {
                 leave(getString(R.string.stream_failed_start))
                 return@runOnUiThread
             }
@@ -640,7 +660,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private var rawEventsLogged = 0
     private var rawMotionsLogged = 0
 
-    private companion object {
+    companion object {
+        /** Test builds only: show the bundled picture instead of connecting to a console. */
+        const val EXTRA_DEMO = "demo"
+
         const val VIDEO_WIDTH = 1920
         const val VIDEO_HEIGHT = 1080
 

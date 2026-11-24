@@ -17,6 +17,8 @@ INK = "#0B0D1E"
 CREAM = "#F4EFE6"
 BLUE = "#6F9BFF"
 CLAY = "#F0683C"
+MINT = "#5FD0A6"
+GOLD = "#FFD66B"
 FONT = "'Avenir Next', 'Avenir', 'Helvetica Neue', sans-serif"
 
 # The screen in world units: 16:9, with gently bowed top and bottom edges like a curved display.
@@ -24,91 +26,92 @@ SX, SY, SW, SH = 600, 80, 1800, 1012
 BOW = 22
 
 
-def game():
-    """What is on the screen, in the screen's own 1800 x 1012 space: a dusk road and a car, with a HUD."""
-    dashes = "".join(
-        f'<polygon points="{900 - w:.0f},{y} {900 + w:.0f},{y} {900 + w * 1.5:.0f},{y + h} {900 - w * 1.5:.0f},{y + h}" fill="{CREAM}" opacity="0.85"/>'
-        for y, h, w in ((690, 22, 3), (740, 38, 5), (820, 62, 9), (930, 82, 15))
-    )
-    segments = "".join(
-        f'<rect x="{70 + i * 70}" y="64" width="58" height="20" rx="10" fill="{CREAM}" opacity="{1 if i < 4 else 0.3}"/>'
+def game(hud=True):
+    """What is on the screen, in the screen's own 1800 x 1012 space: a platform game at dusk, with a HUD."""
+    def platform(x, y, w, h):
+        return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="26" fill="#1A2864"/>'
+                f'<rect x="{x}" y="{y}" width="{w}" height="34" rx="17" fill="{MINT}"/>')
+    coins = "".join(f'<circle cx="{x}" cy="{y}" r="24" fill="{GOLD}"/><circle cx="{x}" cy="{y}" r="11" fill="#F0B63C"/>'
+                    for x, y in ((700, 470), (800, 400), (910, 372), (1020, 400), (1310, 400)))
+    pips = "".join(
+        f'<rect x="{70 + i * 70}" y="64" width="58" height="22" rx="11" fill="{CREAM}" opacity="{1 if i < 4 else 0.3}"/>'
         for i in range(6)
     )
+    counter = (f'<rect x="1528" y="50" width="208" height="58" rx="29" fill="#0B0D1E" opacity="0.5"/>'
+               f'<circle cx="1566" cy="79" r="15" fill="{GOLD}"/><rect x="1596" y="69" width="110" height="20" rx="10" fill="{CREAM}"/>')
     return f'''
       <rect width="1800" height="1012" fill="#2748B8"/>
-      <rect y="300" width="1800" height="240" fill="#4C74E6"/>
-      <rect y="470" width="1800" height="200" fill="#FFB877"/>
-      <circle cx="1210" cy="600" r="170" fill="#FFE7B8"/>
-      <polygon points="0,640 180,520 360,610 560,470 800,620 1010,540 1250,640 1440,500 1640,600 1800,540 1800,700 0,700" fill="#2B3F97"/>
-      <polygon points="0,680 240,600 520,670 1260,660 1500,590 1800,660 1800,720 0,720" fill="#1C2B6B"/>
-      <rect y="660" width="1800" height="352" fill="#111A3D"/>
-      <polygon points="822,660 978,660 1560,1012 240,1012" fill="#1F2D66"/>
-      {dashes}
-      <ellipse cx="900" cy="944" rx="200" ry="26" fill="#0A1028"/>
-      <rect x="752" y="812" width="296" height="124" rx="34" fill="{CLAY}"/>
-      <path d="M792 822 L826 752 Q834 740 848 740 L952 740 Q966 740 974 752 L1008 822 Z" fill="#C84E28"/>
-      <path d="M826 812 L848 764 L952 764 L974 812 Z" fill="#1A2350"/>
-      <rect x="774" y="850" width="64" height="26" rx="13" fill="#FFE1D2"/>
-      <rect x="962" y="850" width="64" height="26" rx="13" fill="#FFE1D2"/>
-      {segments}
-      <rect x="1540" y="52" width="196" height="54" rx="27" fill="#0A0F19" opacity="0.5"/>
-      <circle cx="1578" cy="79" r="10" fill="{CLAY}"/>
-      <rect x="1604" y="70" width="104" height="18" rx="9" fill="{CREAM}"/>
-      <circle cx="158" cy="852" r="98" fill="#0A0F19" opacity="0.5"/>
-      <circle cx="158" cy="852" r="98" fill="none" stroke="{CREAM}" stroke-width="7"/>
-      <path d="M96 890 Q150 850 140 810 T214 790" fill="none" stroke="{CREAM}" stroke-width="9" stroke-linecap="round" opacity="0.7"/>
-      <circle cx="140" cy="838" r="13" fill="{CLAY}"/>
-      <path d="M1520 900 A150 150 0 0 1 1730 900" fill="none" stroke="{CREAM}" stroke-width="14" stroke-linecap="round"/>
-      <path d="M1625 900 L1690 818" stroke="{CLAY}" stroke-width="12" stroke-linecap="round"/>'''
+      <rect y="330" width="1800" height="260" fill="#4C74E6"/>
+      <rect y="560" width="1800" height="460" fill="#FFB877"/>
+      <circle cx="1420" cy="250" r="128" fill="#FFF1CF"/>
+      <path d="M0 720 Q200 560 420 690 T860 660 T1300 700 T1800 620 L1800 1012 L0 1012 Z" fill="#3A53B8"/>
+      <path d="M0 820 Q260 700 520 800 T1080 790 T1800 760 L1800 1012 L0 1012 Z" fill="#2B3F97"/>
+      {platform(-40, 700, 560, 400)}
+      {platform(640, 610, 300, 110)}
+      {platform(1150, 520, 320, 110)}
+      {platform(1560, 690, 320, 400)}
+      {coins}
+      <!-- the hero, mid-jump between two platforms -->
+      <path d="M452 620 Q520 470 640 500" fill="none" stroke="{CREAM}" stroke-width="8" stroke-dasharray="4 26" stroke-linecap="round" opacity="0.8"/>
+      <path d="M560 452 L498 520 L566 512 Z" fill="#C84E28"/>
+      <rect x="556" y="440" width="76" height="92" rx="26" fill="{CLAY}"/>
+      <circle cx="600" cy="412" r="38" fill="#FFE1D2"/>
+      {pips if hud else ""}
+      {counter if hud else ""}'''
 
 
-def scene(tx, ty, scale, key, room=True, seam=True):
-    """The whole scene, placed so world point (0, 0) lands at (tx, ty) and one world unit is `scale` pixels."""
+def scene(tx, ty, scale, key, figure=1.0, hud=True):
+    """The whole scene, placed so world point (0, 0) lands at (tx, ty) and one world unit is `scale` pixels.
+
+    `figure` enlarges the player and sofa about the bottom centre of the screen, for small formats.
+    """
     x1, y1, x2, y2 = SX, SY, SX + SW, SY + SH
     outline = (f"M{x1 + 40} {y1 + BOW} Q{(x1 + x2) / 2} {y1 - BOW} {x2 - 40} {y1 + BOW} Q{x2} {y1 + BOW} {x2} {y1 + BOW + 40} "
                f"L{x2} {y2 - BOW - 40} Q{x2} {y2 - BOW} {x2 - 40} {y2 - BOW} Q{(x1 + x2) / 2} {y2 + BOW} {x1 + 40} {y2 - BOW} "
                f"Q{x1} {y2 - BOW} {x1} {y2 - BOW - 40} L{x1} {y1 + BOW + 40} Q{x1} {y1 + BOW} {x1 + 40} {y1 + BOW} Z")
-    seam = '<path d="M1500 1432 L1500 1900" stroke="#0A0F22" stroke-width="9" stroke-linecap="round"/>' if seam else ""
-    furniture = f'''
-      <g fill="none" stroke="#1E2942" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M2700 1560 L2700 760 M2600 760 L2800 760 L2760 620 L2640 620 Z"/>
-        <path d="M150 330 L470 330 L470 900 L150 900 Z M310 330 L310 900 M150 615 L470 615"/>
-      </g>''' if room else ""
+    cushions = "".join(
+        f'<rect x="{x}" y="1262" width="268" height="150" rx="52" fill="#27356E"/>'
+        f'<path d="M{x + 50} 1264 L{x + 218} 1264" stroke="{BLUE}" stroke-width="8" stroke-linecap="round"/>'
+        for x in (1082, 1366, 1650)
+    )
     return f'''
     <g transform="translate({tx} {ty}) scale({scale})">
-      {furniture}
-      <!-- the screen's light on the floor -->
-      <polygon points="700,1085 2300,1085 2900,2600 100,2600" fill="#131C36"/>
-      <polygon points="900,1085 2100,1085 2440,2600 560,2600" fill="#1B2747"/>
+      <!-- the screen's light on the floor: a soft pool, no hard beams -->
+      <polygon points="760,1085 2240,1085 3300,5000 -300,5000" fill="#101533"/>
+      <ellipse cx="1500" cy="1560" rx="980" ry="250" fill="#161D42"/>
       <clipPath id="screen-{key}"><path d="{outline}"/></clipPath>
-      <g clip-path="url(#screen-{key})"><g transform="translate({SX} {SY})">{game()}</g></g>
-      <!-- the player and the sofa, seen from behind; the head cuts into the bottom of the picture -->
-      <g transform="translate(0 -128)">
-        <!-- sitting on the right-hand cushion, so the head does not line up with the car on the screen -->
-        <g transform="translate(236 0)">
-          <ellipse cx="1500" cy="1456" rx="270" ry="128" fill="#161E40"/>
-          <rect x="1454" y="1320" width="92" height="90" fill="#161E40"/>
-          <circle cx="1500" cy="1232" r="122" fill="#0F1634"/>
-          <path d="M1398 1166 A122 122 0 0 1 1602 1166" fill="none" stroke="#B4C8FF" stroke-width="9" stroke-linecap="round"/>
-          <rect x="1362" y="1206" width="276" height="54" rx="27" fill="{CREAM}"/>
+      <g clip-path="url(#screen-{key})"><g transform="translate({SX} {SY})">{game(hud)}</g></g>
+      <g transform="translate(1500 1092) scale({figure}) translate(-1500 -1092)">
+        <ellipse cx="1500" cy="1630" rx="640" ry="46" fill="#080A18"/>
+        <!-- the player, seen from behind, head cutting into the bottom of the picture -->
+        <clipPath id="head-{key}"><circle cx="1500" cy="1096" r="112"/></clipPath>
+        <ellipse cx="1500" cy="1300" rx="236" ry="108" fill="#34437D"/>
+        <rect x="1456" y="1180" width="88" height="70" fill="#34437D"/>
+        <circle cx="1500" cy="1096" r="112" fill="#34437D"/>
+        <g clip-path="url(#head-{key})">
+          <path d="M1500 980 L1500 1104" stroke="{CREAM}" stroke-width="20"/>
+          <path d="M1380 1090 Q1500 1130 1620 1090" fill="none" stroke="{CREAM}" stroke-width="50"/>
         </g>
-        <rect x="884" y="1474" width="190" height="2600" rx="80" fill="#0D1228"/>
-        <rect x="1926" y="1474" width="190" height="2600" rx="80" fill="#0D1228"/>
-        <rect x="1000" y="1388" width="1000" height="2800" rx="96" fill="#121935"/>
-        <path d="M1090 1391 L1910 1391" stroke="{BLUE}" stroke-width="9" stroke-linecap="round" opacity="0.85"/>
-        {seam}
+        <path d="M1404 1040 A112 112 0 0 1 1596 1040" fill="none" stroke="#C3D3FF" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+        <!-- a low, wide sofa: arms, a back made of three cushions, short legs -->
+        <rect x="1016" y="1560" width="60" height="64" rx="14" fill="#0A0D20"/>
+        <rect x="1924" y="1560" width="60" height="64" rx="14" fill="#0A0D20"/>
+        <rect x="1056" y="1320" width="888" height="270" rx="64" fill="#1C2756"/>
+        {cushions}
+        <rect x="960" y="1352" width="150" height="250" rx="62" fill="#222F63"/>
+        <rect x="1890" y="1352" width="150" height="250" rx="62" fill="#222F63"/>
       </g>
     </g>'''
 
 
 def wordmark(x, baseline, size, anchor="start"):
-    """The title, with its "o" drawn as a small screen. Laid out as HTML so the letters space themselves."""
+    """The title. Its "o" is a small lit screen: a cream ring like the other letters, glowing blue inside."""
     width = size * 4.4
     left = x if anchor == "start" else x - width / 2
     align = "left" if anchor == "start" else "center"
     return f'''
     <foreignObject x="{left}" y="{baseline - size * 1.1}" width="{width}" height="{size * 1.5}">
-      <div xmlns="http://www.w3.org/1999/xhtml" style="font:700 {size}px/1.1 {FONT};color:{CREAM};letter-spacing:-0.035em;text-align:{align};white-space:nowrap">Fars<span style="display:inline-block;box-sizing:border-box;width:0.68em;height:0.52em;margin:0 0.05em 0 0.035em;border:0.14em solid {BLUE};border-radius:0.17em"></span>fa</div>
+      <div xmlns="http://www.w3.org/1999/xhtml" style="font:700 {size}px/1.1 {FONT};color:{CREAM};letter-spacing:-0.035em;text-align:{align};white-space:nowrap">Fars<span style="display:inline-block;box-sizing:border-box;width:0.61em;height:0.52em;margin:0 0.055em 0 0.045em;border:0.165em solid {CREAM};border-radius:0.18em;background:{BLUE}"></span>fa</div>
     </foreignObject>'''
 
 
@@ -124,18 +127,25 @@ html,body{{margin:0;padding:0;background:transparent}}svg{{display:block}}</styl
 
 
 def assets():
-    yield "icon-512", 512, 512, scene(-224, -20, 0.32, "icon", room=False), INK
+    yield "icon-512", 512, 512, scene(-119, 30, 0.25, "icon", figure=1.5, hud=False), INK
     yield ("cover-landscape-2560x1440", 2560, 1440,
-           scene(760, 40, 0.8, "land", room=False) + wordmark(150, 790, 250), INK)
+           scene(1064, 175, 0.56, "land") + wordmark(150, 800, 285), INK)
     yield ("cover-square-1440", 1440, 1440,
-           scene(-180, 12, 0.6, "square", seam=False) + wordmark(720, 1108, 196, "middle"), INK)
+           scene(-30, 60, 0.5, "square") + wordmark(720, 1160, 220, "middle"), INK)
     yield ("cover-portrait-1008x1440", 1008, 1440,
-           scene(-246, 110, 0.5, "portrait", room=False, seam=False) + wordmark(504, 1046, 150, "middle"), INK)
+           scene(-246, 190, 0.5, "portrait") + wordmark(504, 1225, 180, "middle"), INK)
     yield ("hero-3000x900", 3000, 900,
-           scene(1120, -80, 0.62, "hero", room=False) + wordmark(240, 540, 250), INK)
+           scene(1470, 36, 0.46, "hero") + wordmark(300, 560, 300), INK)
     yield ("mini-landscape-1080x360", 1080, 360,
-           scene(310, -10, 0.34, "mini", room=False) + wordmark(56, 222, 112), INK)
-    yield "logo-transparent-3000x900", 3000, 900, wordmark(1500, 600, 520, "middle"), None
+           scene(540, 10, 0.2, "mini", figure=1.3, hud=False) + wordmark(60, 228, 130), INK)
+    yield "logo-transparent-3000x900", 3000, 900, wordmark(1500, 640, 520, "middle"), None
+    # The picture shown on the virtual screen when taking store screenshots, squeezed into video range
+    # (black 16, white 235) because the app stretches whatever it shows back out to full range.
+    yield ("demo-screen-1920x1080", 1920, 1080,
+           f'<filter id="video-range"><feComponentTransfer><feFuncR type="linear" slope="0.859" intercept="0.063"/>'
+           f'<feFuncG type="linear" slope="0.859" intercept="0.063"/><feFuncB type="linear" slope="0.859" intercept="0.063"/>'
+           f'</feComponentTransfer></filter><g filter="url(#video-range)" transform="scale({1920 / 1800})">'
+           f'<rect width="1800" height="1012" fill="#000"/>{game()}</g>', None)
 
 
 def main():

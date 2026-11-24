@@ -37,6 +37,16 @@ for y in range(0, height, 6):
         left.append((lit[0] + 3, y))
         right.append((lit[-1] - 3, y))
 points = ",".join(f"{x}px {y}px" for x, y in left + right[::-1])
+if os.environ.get("OUTLINE") == "columns":
+    # A curved screen bows in at the top and bottom, so its outline is taken column by column instead.
+    top, bottom = [], []
+    for x in range(0, width, 6):
+        lit = [y for y in range(0, height, 2)
+               if sum(data[offset + ((height - 1 - y) if flipped else y) * row + x * step + c] for c in range(3)) > 70]
+        if len(lit) > 40:
+            top.append((x, lit[0] + 3))
+            bottom.append((x, lit[-1] - 3))
+    points = ",".join(f"{x}px {y}px" for x, y in top + bottom[::-1])
 
 html = out + ".html"
 place = f"position:absolute;left:0;top:0;transform-origin:1280px 720px;transform:translate({cx - 1280}px,{cy - 720}px) scale({scale})"

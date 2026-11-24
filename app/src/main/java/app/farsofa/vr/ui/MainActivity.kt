@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra(ImmersiveActivity.EXTRA_DEMO, false) && applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             startActivity(
                 Intent(this, ImmersiveActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(ImmersiveActivity.EXTRA_DEMO, true)
+                    .putExtras(intent)
             )
             finishAndRemoveTask()
             return

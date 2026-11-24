@@ -60,6 +60,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private var xr = 0L
     private var leaving = false
     private var demo = false
+    private var demoFrame = false
 
     private var layout = ScreenLayout()
     private var presets = emptyList<ScreenPreset>()
@@ -147,6 +148,16 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         // Test builds can open the screen with a picture of our own instead of a console, which is how
         // the store screenshots are taken without showing anyone else's game.
         demo = intent.getBooleanExtra(EXTRA_DEMO, false) && applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (demo) {
+            // A staged shot: the layout comes from the launch command and is not remembered afterwards.
+            layout = ScreenLayout(
+                width = intent.getFloatExtra("width", layout.width),
+                distance = intent.getFloatExtra("distance", layout.distance),
+                curved = intent.getBooleanExtra("curved", false),
+                passthrough = intent.getBooleanExtra("passthrough", false),
+            ).clamped()
+            follow = false
+        }
         if (!stream.isOpen && !demo) {
             leave(getString(R.string.stream_failed_start))
             return
@@ -172,7 +183,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         leaving = true
         Diagnostics.event("immersive leave notice=$notice layout=$layout pitch=$pitch yaw=$yaw")
         handler.removeCallbacksAndMessages(null)
-        store.current = layout
+        if (!demo) store.current = layout
         // Drawing happens on this thread, so dropping the surfaces here means nothing touches them again.
         barSurface = null
         overlaySurface = null
@@ -221,7 +232,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     /** The frame with its handles shows while a pointer is on it, and for as long as the controls are open. */
     private val frameVisible: Boolean
-        get() = pointerSeen && (mode == Mode.CONTROLS || nearFrame || (grab != null && grab != Grab.Item))
+        get() = demoFrame || (pointerSeen && (mode == Mode.CONTROLS || nearFrame || (grab != null && grab != Grab.Item)))
 
     private fun drawPanels() {
         val pad = pinPad
@@ -281,7 +292,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         mode = Mode.PLAYING
         grab = null
         triggerDown = false
-        store.current = layout
+        if (!demo) store.current = layout
         stream.menuOpen = false
         pushScene()
     }
@@ -363,7 +374,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         handler.removeCallbacks(repeatHeld)
         if (held == null) return
         held = null
-        store.current = layout
+        if (!demo) store.current = layout
         drawPanels()
     }
 
@@ -518,7 +529,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         Diagnostics.event("grab ended $grab layout=$layout pitch=$pitch yaw=$yaw")
         grab = null
         stopHolding()
-        store.current = layout
+        if (!demo) store.current = layout
     }
 
     // --- Immersive screen (frame thread) ---
@@ -536,6 +547,17 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 drawDemoPicture(video)
             } else if (!stream.attachSurface(video)) {
                 leave(getString(R.string.stream_failed_start))
+                return@runOnUiThread
+            }
+            if (demo) {
+                demoFrame = intent.getBooleanExtra("frame", false)
+                if (intent.getBooleanExtra("pin", false)) openPin(false)
+                else if (intent.getBooleanExtra("controls", false)) openControls()
+                else pushScene()
+                if (demoFrame) {
+                    drawPanels()
+                    pushScene()
+                }
                 return@runOnUiThread
             }
             mode = Mode.HINT

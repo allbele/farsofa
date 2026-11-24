@@ -141,11 +141,12 @@ def assets():
     yield ("mini-landscape-1080x360", 1080, 360,
            scene(540, 6, 0.2, "mini", figure=1.12, hud=False) + wordmark(60, 228, 130), INK)
     yield "logo-transparent-3000x900", 3000, 900, wordmark(1500, 770, 520, "middle"), None
-    # The picture shown on the virtual screen when taking store screenshots, squeezed into video range
-    # (black 16, white 235) because the app stretches whatever it shows back out to full range.
+    # The picture shown on the virtual screen when taking store screenshots. The app stretches video
+    # range to full range in linear light (see xr_screen.cpp), so this applies the exact inverse, also
+    # in linear light (SVG filters work in linearRGB by default): in = out * 0.825 + 0.0052.
     yield ("demo-screen-1920x1080", 1920, 1080,
-           f'<filter id="video-range"><feComponentTransfer><feFuncR type="linear" slope="0.859" intercept="0.063"/>'
-           f'<feFuncG type="linear" slope="0.859" intercept="0.063"/><feFuncB type="linear" slope="0.859" intercept="0.063"/>'
+           f'<filter id="video-range"><feComponentTransfer><feFuncR type="linear" slope="0.825" intercept="0.0052"/>'
+           f'<feFuncG type="linear" slope="0.825" intercept="0.0052"/><feFuncB type="linear" slope="0.825" intercept="0.0052"/>'
            f'</feComponentTransfer></filter><g filter="url(#video-range)" transform="scale({1920 / 1800})">'
            f'<rect width="1800" height="1012" fill="#000"/>{game()}</g>', None)
 

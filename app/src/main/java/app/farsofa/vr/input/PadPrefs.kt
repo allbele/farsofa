@@ -28,6 +28,14 @@ class PadPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_FINE_HAPTICS, false)
         set(value) = prefs.edit().putBoolean(KEY_FINE_HAPTICS, value).apply()
 
+    /**
+     * Frames are made up for a 30 fps game so it moves like 60. Not a controller setting, but it lives
+     * here with the other things a player may want switched off. Still being tuned.
+     */
+    var smoothMotion: Boolean
+        get() = prefs.getBoolean(KEY_SMOOTH, false)
+        set(value) = prefs.edit().putBoolean(KEY_SMOOTH, value).apply()
+
     /** True when any of it needs to talk back to the controller over Bluetooth. */
     val needsLink: Boolean get() = triggers || lights || fineHaptics
 
@@ -36,5 +44,6 @@ class PadPrefs(context: Context) {
         const val KEY_LIGHTS = "lights"
         const val KEY_MOTION = "motion"
         const val KEY_FINE_HAPTICS = "fineHaptics"
+        const val KEY_SMOOTH = "smoothMotion"
     }
 }

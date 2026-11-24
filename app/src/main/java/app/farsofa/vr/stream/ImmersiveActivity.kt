@@ -167,7 +167,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         }
         xr = XrNative.start(
             this, VIDEO_WIDTH, VIDEO_HEIGHT, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT,
-            PanelRenderer.OVERLAY_PX_WIDTH, PanelRenderer.OVERLAY_PX_HEIGHT, this,
+            PanelRenderer.OVERLAY_PX_WIDTH, PanelRenderer.OVERLAY_PX_HEIGHT,
+            app.farsofa.vr.input.PadPrefs(this).smoothMotion, this,
         )
         pushScene()
     }

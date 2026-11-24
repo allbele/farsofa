@@ -63,8 +63,8 @@
     <string name="bar_reset_confirm">Confirm?</string>
     <string name="bar_backspace">Delete</string>
     <string name="streaming_notice">The picture is streamed from your own console. A fast, stable Wi-Fi connection is required.</string>
-    <string name="controller_title">Controller</string>
-    <string name="controller_intro">For a DualSense paired with the headset. Changes apply to the next game you start.</string>
+    <string name="controller_title">Options</string>
+    <string name="controller_intro">The controller options are for a DualSense paired with the headset. Changes apply to the next game you start.</string>
     <string name="controller_triggers">Adaptive triggers</string>
     <string name="controller_triggers_detail">The triggers push back the way the game asks.</string>
     <string name="controller_lights">Lights follow the console</string>
@@ -74,4 +74,6 @@
     <string name="controller_haptics">Detailed haptics (experimental)</string>
     <string name="controller_haptics_detail">The fine vibration of PS5 games instead of plain rumble. May lag or feel rough.</string>
     <string name="controller_done">Done</string>
+    <string name="option_smooth">Smooth motion (experimental)</string>
+    <string name="option_smooth_detail">Makes up frames so a 30 fps game moves like 60. Fast motion may wobble at the edges.</string>
 </resources>

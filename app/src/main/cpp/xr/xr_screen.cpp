@@ -27,6 +27,8 @@
 #include <thread>
 #include <vector>
 
+#include "smooth_video.h"
+
 #define LOG_TAG "FarsofaXr"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -111,6 +113,9 @@ struct XrScreen
 
 	int video_width = 1920;
 	int video_height = 1080;
+	// The app draws the video itself, which is what frame prediction needs. Asked for at start.
+	bool smooth_requested = false;
+	SmoothVideo *smooth = nullptr; // owned by the frame thread
 
 	// Changed from the UI thread while the frame loop runs.
 	std::mutex scene_mutex;
@@ -552,16 +557,34 @@ bool create_session(XrScreen *xr)
 	space_info.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
 	ok(xrCreateReferenceSpace(xr->session, &space_info, &xr->view_space), "view space");
 
-	// Android surface swapchains take their format from the producer, so those fields stay zero.
-	XrSwapchainCreateInfo swapchain_info = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
-	swapchain_info.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-	swapchain_info.width = static_cast<uint32_t>(xr->video_width);
-	swapchain_info.height = static_cast<uint32_t>(xr->video_height);
-	jobject surface = nullptr;
-	if(!ok(xr->create_surface_swapchain(xr->session, &swapchain_info, &xr->swapchain, &surface), "surface swapchain")
-		|| !surface)
-		return false;
-	xr->surface = xr->env->NewGlobalRef(surface);
+	if(xr->smooth_requested)
+	{
+		auto *smooth = new SmoothVideo();
+		if(smooth->Create(xr->env, xr->session, xr->video_width, xr->video_height))
+		{
+			xr->smooth = smooth;
+			xr->swapchain = smooth->Swapchain();
+			xr->surface = xr->env->NewGlobalRef(smooth->Surface());
+		}
+		else
+		{
+			LOGE("Smooth video is unavailable; the decoder draws straight to the compositor");
+			delete smooth;
+		}
+	}
+	if(!xr->smooth)
+	{
+		// Android surface swapchains take their format from the producer, so those fields stay zero.
+		XrSwapchainCreateInfo swapchain_info = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
+		swapchain_info.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+		swapchain_info.width = static_cast<uint32_t>(xr->video_width);
+		swapchain_info.height = static_cast<uint32_t>(xr->video_height);
+		jobject surface = nullptr;
+		if(!ok(xr->create_surface_swapchain(xr->session, &swapchain_info, &xr->swapchain, &surface), "surface swapchain")
+			|| !surface)
+			return false;
+		xr->surface = xr->env->NewGlobalRef(surface);
+	}
 
 	if(!create_panel(xr, &xr->bar, xr->bar.width, xr->bar.height)
 		|| !create_panel(xr, &xr->overlay, xr->overlay.width, xr->overlay.height))
@@ -628,6 +651,14 @@ bool create_session(XrScreen *xr)
 
 void destroy_session(XrScreen *xr)
 {
+	if(xr->smooth)
+	{
+		// Its swapchain is its own to destroy, while the session and the GL context are still there.
+		xr->smooth->Destroy(xr->env);
+		delete xr->smooth;
+		xr->smooth = nullptr;
+		xr->swapchain = XR_NULL_HANDLE;
+	}
 	if(xr->surface)
 	{
 		xr->env->DeleteGlobalRef(xr->surface);
@@ -958,6 +989,8 @@ void submit_frame(XrScreen *xr)
 		}
 	}
 	update_input(xr, frame_state.predictedDisplayTime, scene.pointer);
+	if(xr->smooth)
+		xr->smooth->Render(xr->env);
 
 	float aspect = static_cast<float>(xr->video_width) / static_cast<float>(xr->video_height);
 	bool curved = scene.curved && xr->has_cylinder;
@@ -985,7 +1018,8 @@ void submit_frame(XrScreen *xr)
 	// The compositor's sharpening filter (XR_FB_composition_layer_settings) is deliberately not used:
 	// on a Quest 3 it only sharpens a disc in the middle of the view, and the player sees that disc
 	// travel across the picture as they move their head.
-	const void *video_chain = layout;
+	// Drawn by the app, the picture is already the right way up and in full range.
+	const void *video_chain = xr->smooth ? nullptr : layout;
 
 	// The console's video keeps black at 16 and white at 235 out of 255. Screenshots from a Quest 3
 	// showed the compositor displaying those values as they are (blacks near 30, whites capped near
@@ -1000,7 +1034,7 @@ void submit_frame(XrScreen *xr)
 	const float range_scale = 1.0f / (video_white - video_black);
 	full_range.colorScale = {range_scale, range_scale, range_scale, 1.0f};
 	full_range.colorBias = {-video_black * range_scale, -video_black * range_scale, -video_black * range_scale, 0.0f};
-	if(xr->has_color_scale_bias && scene.expand_range)
+	if(!xr->smooth && xr->has_color_scale_bias && scene.expand_range)
 		video_chain = &full_range;
 
 	XrCompositionLayerQuad quad = {XR_TYPE_COMPOSITION_LAYER_QUAD};
@@ -1160,9 +1194,10 @@ void frame_thread(XrScreen *xr)
 extern "C" {
 
 JNIEXPORT jlong JNICALL XR_NATIVE(start)(JNIEnv *env, jclass, jobject activity, jint video_width, jint video_height,
-		jint bar_width, jint bar_height, jint overlay_width, jint overlay_height, jobject listener)
+		jint bar_width, jint bar_height, jint overlay_width, jint overlay_height, jboolean smooth, jobject listener)
 {
 	auto *xr = new XrScreen();
+	xr->smooth_requested = smooth;
 	env->GetJavaVM(&xr->vm);
 	xr->activity = env->NewGlobalRef(activity);
 	xr->listener = env->NewGlobalRef(listener);

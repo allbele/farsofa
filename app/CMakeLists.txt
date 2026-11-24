@@ -22,10 +22,11 @@ add_subdirectory("${CHIAKI_DIR}" chiaki-ng EXCLUDE_FROM_ALL)
 add_library(farsofa SHARED
         src/main/cpp/core/bridge.cpp
         src/main/cpp/xr/xr_screen.cpp
+        src/main/cpp/xr/smooth_video.cpp
         src/main/cpp/video/video_decoder.cpp
         "${CHIAKI_ANDROID_CPP}/audio-decoder.c"
         src/main/cpp/audio/audio_output.cpp
         "${CHIAKI_ANDROID_CPP}/log.c")
 
 target_include_directories(farsofa PRIVATE "${CHIAKI_ANDROID_CPP}")
-target_link_libraries(farsofa chiaki-lib oboe::oboe OpenXR::openxr_loader EGL log mediandk android)
+target_link_libraries(farsofa chiaki-lib oboe::oboe OpenXR::openxr_loader EGL GLESv3 log mediandk android)

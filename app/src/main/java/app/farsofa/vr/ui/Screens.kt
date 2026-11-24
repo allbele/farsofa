@@ -356,6 +356,7 @@ fun ControllerDialog(onDismiss: () -> Unit) {
     var lights by remember { mutableStateOf(prefs.lights) }
     var motion by remember { mutableStateOf(prefs.motion) }
     var fineHaptics by remember { mutableStateOf(prefs.fineHaptics) }
+    var smooth by remember { mutableStateOf(prefs.smoothMotion) }
 
     @Composable
     fun option(title: Int, detail: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
@@ -379,6 +380,7 @@ fun ControllerDialog(onDismiss: () -> Unit) {
                 option(R.string.controller_lights, R.string.controller_lights_detail, lights) { lights = it; prefs.lights = it }
                 option(R.string.controller_motion, R.string.controller_motion_detail, motion) { motion = it; prefs.motion = it }
                 option(R.string.controller_haptics, R.string.controller_haptics_detail, fineHaptics) { fineHaptics = it; prefs.fineHaptics = it }
+                option(R.string.option_smooth, R.string.option_smooth_detail, smooth) { smooth = it; prefs.smoothMotion = it }
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.controller_done)) } },

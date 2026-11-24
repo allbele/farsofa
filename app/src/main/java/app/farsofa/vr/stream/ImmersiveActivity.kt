@@ -582,10 +582,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 }
                 return@runOnUiThread
             }
+            // Until the console answers there is nothing to look at, so say what is going on.
             mode = Mode.HINT
-            renderer.drawHint(bar, getString(R.string.immersive_hint))
+            renderer.drawHint(bar, getString(if (stream.remote) R.string.stream_connecting_remote else R.string.stream_connecting))
             pushScene()
-            handler.postDelayed(hideHint, HINT_MS)
         }
 
     override fun onTouchState(buttons: Int, l2: Int, r2: Int, leftX: Int, leftY: Int, rightX: Int, rightY: Int) =
@@ -632,7 +632,12 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     // --- Stream ---
 
-    override fun onStreamConnected() = Unit
+    override fun onStreamConnected() {
+        if (leaving || mode != Mode.HINT) return
+        barSurface?.let { renderer.drawHint(it, getString(R.string.immersive_hint)) }
+        pushScene()
+        handler.postDelayed(hideHint, HINT_MS)
+    }
 
     override fun onLoginPinRequest(incorrect: Boolean) = openPin(incorrect)
 

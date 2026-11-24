@@ -18,6 +18,7 @@ import android.view.Surface
 import app.farsofa.vr.console.RegisteredConsole
 import app.farsofa.vr.core.Diagnostics
 import app.farsofa.vr.core.Native
+import app.farsofa.vr.psn.CaBundle
 import app.farsofa.vr.input.DualSenseLink
 import app.farsofa.vr.input.GamepadInput
 import app.farsofa.vr.input.PadMotion
@@ -53,6 +54,11 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     }
 
     @Volatile private var ptr = 0L
+
+    /** True for a console reached through PSN rather than found on this network. */
+    var remote = false
+        private set
+    private var remoteThread: Thread? = null
     private var started = false
     private val handler = Handler(Looper.getMainLooper())
     private val teardown = Executors.newSingleThreadExecutor()
@@ -181,10 +187,20 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     }
 
     init {
+        val psnDuid = intent.getStringExtra(EXTRA_PSN_DUID)
+        val psnToken = intent.getStringExtra(EXTRA_PSN_TOKEN)
+        val psnAccount = intent.getByteArrayExtra(EXTRA_PSN_ACCOUNT)
+        if (psnDuid != null && psnToken != null && psnAccount != null) {
+            remote = true
+            ptr = Native.psnSessionCreate(
+                psnDuid, psnToken, psnAccount,
+                Native.RESOLUTION_1080P, 60, REMOTE_BITRATE_KBPS, Native.CODEC_HEVC, this,
+            )
+        }
         val host = intent.getStringExtra(EXTRA_HOST)
         val registKey = intent.getByteArrayExtra(EXTRA_REGIST_KEY)
         val rpKey = intent.getByteArrayExtra(EXTRA_RP_KEY)
-        if (host != null && registKey != null && rpKey != null) {
+        if (!remote && host != null && registKey != null && rpKey != null) {
             ptr = Native.sessionCreate(
                 host, registKey, rpKey,
                 Native.RESOLUTION_1080P, 60, LAN_BITRATE_KBPS, Native.CODEC_HEVC, this,
@@ -209,7 +225,18 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         Native.sessionSetSurface(session, surface)
         if (!started) {
             started = true
-            return Native.sessionStart(session)
+            if (!remote) return Native.sessionStart(session)
+            // Finding a way through two routers takes a while, and must not hold up the main thread.
+            remoteThread = Thread({
+                CaBundle.ensure(activity)
+                val error = Native.psnConnect(session)
+                Diagnostics.event("remote connect result='$error'")
+                activity.runOnUiThread {
+                    if (!isOpen) return@runOnUiThread
+                    if (error.isEmpty() && Native.sessionStart(session)) return@runOnUiThread
+                    callbacks.onStreamEnded(error.ifEmpty { "start" })
+                }
+            }, "farsofa-remote").also { it.start() }
         }
         return true
     }
@@ -259,7 +286,18 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         }
         padMotion.stop()
         padTouch.release()
+        val connecting = remoteThread
         teardown.execute {
+            if (connecting != null && session != 0L) {
+                Native.psnCancel(session)
+                connecting.join(5_000)
+                // Still inside the library: freeing under it would crash, so the session is left behind.
+                if (connecting.isAlive) {
+                    padLink.stop()
+                    afterFree?.invoke()
+                    return@execute
+                }
+            }
             // Before the session goes: this lets go of the triggers, which would otherwise stay stiff.
             padLink.stop()
             if (session != 0L) Native.sessionFree(session)
@@ -421,6 +459,18 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         private const val EXTRA_HOST = "host"
         private const val EXTRA_REGIST_KEY = "registKey"
         private const val EXTRA_RP_KEY = "rpKey"
+        private const val EXTRA_PSN_DUID = "psnDuid"
+        private const val EXTRA_PSN_TOKEN = "psnToken"
+        private const val EXTRA_PSN_ACCOUNT = "psnAccount"
+
+        /** Home uploads are far slower than a local network; the console lowers this further if it must. */
+        private const val REMOTE_BITRATE_KBPS = 15000
+
+        fun <T : Activity> remoteIntent(context: Context, target: Class<T>, consoleDuid: String, token: String, accountId: ByteArray): Intent =
+            Intent(context, target)
+                .putExtra(EXTRA_PSN_DUID, consoleDuid)
+                .putExtra(EXTRA_PSN_TOKEN, token)
+                .putExtra(EXTRA_PSN_ACCOUNT, accountId)
         private const val RUMBLE_MS = 2000L
         private const val RUMBLE_TIMEOUT_MS = 400L
         private const val MOTION_SEND_MS = 4L

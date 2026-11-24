@@ -118,4 +118,15 @@
     <string name="bar_option_smooth">SMOOTH MOTION</string>
     <string name="bar_option_on">On</string>
     <string name="bar_option_off">Off</string>
+    <string name="stream_connecting_remote">Connecting over the internet… this can take up to a minute</string>
+    <string name="consoles_local">On this network</string>
+    <string name="consoles_remote">Over the internet</string>
+    <string name="consoles_remote_hint">For playing away from home. The console must be on, or in rest mode with \"Stay Connected to the Internet\" enabled.</string>
+    <string name="consoles_remote_loading">Asking PlayStation Network for your consoles…</string>
+    <string name="consoles_remote_empty">No console on this account has Remote Play enabled.</string>
+    <string name="consoles_remote_error">Could not reach PlayStation Network (%1$s).</string>
+    <string name="consoles_remote_retry">Try again</string>
+    <string name="consoles_remote_off">Remote Play is off on this console</string>
+    <string name="console_play_remote">Play over the internet</string>
+    <string name="consoles_local_empty">No console found on this network yet.</string>
 </resources>

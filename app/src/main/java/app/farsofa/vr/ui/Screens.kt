@@ -241,6 +241,9 @@ fun ConsoleListScreen(
     onPlay: (ConsoleRow) -> Unit,
     onPair: (ConsoleRow) -> Unit,
     onForget: (ConsoleRow) -> Unit,
+    remote: RemoteConsoles,
+    onPlayRemote: (RemoteConsole) -> Unit,
+    onRefreshRemote: () -> Unit,
     onLearnPad: () -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -265,29 +268,95 @@ fun ConsoleListScreen(
         }
         Spacer(Modifier.height(20.dp))
 
-        if (rows.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                CircularProgressIndicator()
-                Spacer(Modifier.height(20.dp))
-                Text(stringResource(R.string.consoles_searching), fontSize = 20.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.consoles_searching_hint),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.widthIn(max = 520.dp),
-                )
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item { SectionTitle(stringResource(R.string.consoles_local), null) }
+            if (rows.isEmpty()) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text(stringResource(R.string.consoles_searching), fontSize = 18.sp)
+                            Text(stringResource(R.string.consoles_searching_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                        }
+                    }
+                }
+            } else {
                 items(rows, key = { it.id }) { row ->
                     ConsoleCard(row, waking = wakingId == row.id, busy = wakingId != null, onPlay, onPair, onForget)
                 }
             }
+
+            item {
+                Spacer(Modifier.height(10.dp))
+                SectionTitle(stringResource(R.string.consoles_remote), stringResource(R.string.consoles_remote_hint))
+            }
+            when (remote) {
+                RemoteConsoles.Loading -> item {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                        Spacer(Modifier.width(16.dp))
+                        Text(stringResource(R.string.consoles_remote_loading), fontSize = 16.sp)
+                    }
+                }
+                is RemoteConsoles.Failed -> item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.consoles_remote_error, remote.reason), color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                        OutlinedButton(onClick = onRefreshRemote) { Text(stringResource(R.string.consoles_remote_retry)) }
+                    }
+                }
+                is RemoteConsoles.Found -> if (remote.consoles.isEmpty()) {
+                    item { Text(stringResource(R.string.consoles_remote_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                } else {
+                    items(remote.consoles, key = { "remote-" + it.duid }) { console ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
+                                .background(MaterialTheme.colorScheme.surface).padding(horizontal = 24.dp, vertical = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(14.dp).clip(CircleShape).background(if (console.enabled) Accent else Offline))
+                            Spacer(Modifier.width(18.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(console.name, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                                if (!console.enabled) Text(stringResource(R.string.consoles_remote_off), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Button(onClick = { onPlayRemote(console) }, enabled = console.enabled && wakingId == null, modifier = Modifier.height(52.dp)) {
+                                Text(stringResource(R.string.console_play_remote), fontSize = 17.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, hint: String?) {
+    Column {
+        Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (hint != null) Text(hint, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** A console of the account, as PlayStation Network lists it. */
+class RemoteConsole(val duid: String, val name: String, val enabled: Boolean)
+
+/** What is known about the account's consoles for playing away from home. */
+sealed interface RemoteConsoles {
+    data object Loading : RemoteConsoles
+    class Failed(val reason: String) : RemoteConsoles
+    class Found(val consoles: List<RemoteConsole>) : RemoteConsoles
+
+    companion object {
+        /** Reads the library's answer: "ok" and one line per console, or "error" and why. */
+        fun parse(lines: Array<String>?): RemoteConsoles {
+            if (lines == null || lines.isEmpty()) return Failed("no answer")
+            if (lines[0] != "ok") return Failed(lines.getOrElse(1) { "unknown" })
+            return Found(lines.drop(1).mapNotNull { line ->
+                val parts = line.split('\t')
+                if (parts.size < 3 || parts[0].length != 64) null else RemoteConsole(parts[0], parts[1].ifBlank { "PS5" }, parts[2] == "1")
+            })
         }
     }
 }

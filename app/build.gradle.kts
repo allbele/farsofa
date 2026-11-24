@@ -41,6 +41,9 @@ android {
                 targets("farsofa")
                 arguments(
                     "-DCHIAKI_ENABLE_TESTS=OFF",
+                    // Where the library's own curl finds the certificate authorities; see psn/CaBundle.kt.
+                    "-DCURL_CA_BUNDLE=/data/user/0/app.farsofa.vr/files/ca.pem",
+                    "-DCURL_CA_PATH=none",
                     "-DCHIAKI_ENABLE_CLI=OFF",
                     "-DCHIAKI_ENABLE_GUI=OFF",
                     "-DCHIAKI_ENABLE_SETSU=OFF",

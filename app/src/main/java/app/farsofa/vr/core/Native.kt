@@ -68,6 +68,20 @@ object Native {
         resolutionPreset: Int, fps: Int, bitrateKbps: Int, codec: Int,
         listener: SessionListener,
     ): Long
+    /** First element "ok" then "duid\tname\t1|0" per console of the account, or "error" and a reason. Blocks. */
+    @JvmStatic external fun psnListDevices(token: String): Array<String>?
+
+    /** A session for a console reached through PSN. Returns 0 on bad input. Call [psnConnect] before [sessionStart]. */
+    @JvmStatic external fun psnSessionCreate(
+        consoleDuid: String, token: String, accountId: ByteArray,
+        resolutionPreset: Int, fps: Int, bitrateKbps: Int, codec: Int,
+        listener: SessionListener,
+    ): Long
+
+    /** Opens the route to the console. Blocks for many seconds. Empty when it worked, else what failed. */
+    @JvmStatic external fun psnConnect(ptr: Long): String
+    @JvmStatic external fun psnCancel(ptr: Long)
+
     @JvmStatic external fun sessionStart(ptr: Long): Boolean
     @JvmStatic external fun sessionStop(ptr: Long)
     @JvmStatic external fun sessionFree(ptr: Long)

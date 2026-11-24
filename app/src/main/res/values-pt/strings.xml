@@ -117,4 +117,15 @@
     <string name="bar_option_smooth">MOV. SUAVE</string>
     <string name="bar_option_on">Ligado</string>
     <string name="bar_option_off">Desligado</string>
+    <string name="stream_connecting_remote">Conectando pela internet… pode levar até um minuto</string>
+    <string name="consoles_local">Nesta rede</string>
+    <string name="consoles_remote">Pela internet</string>
+    <string name="consoles_remote_hint">Para jogar fora de casa. O console precisa estar ligado, ou em repouso com \"Permanecer conectado à internet\" ativado.</string>
+    <string name="consoles_remote_loading">Consultando seus consoles na PlayStation Network…</string>
+    <string name="consoles_remote_empty">Nenhum console desta conta tem o Uso Remoto ativado.</string>
+    <string name="consoles_remote_error">Não foi possível falar com a PlayStation Network (%1$s).</string>
+    <string name="consoles_remote_retry">Tentar de novo</string>
+    <string name="consoles_remote_off">O Uso Remoto está desligado neste console</string>
+    <string name="console_play_remote">Jogar pela internet</string>
+    <string name="consoles_local_empty">Nenhum console encontrado nesta rede ainda.</string>
 </resources>

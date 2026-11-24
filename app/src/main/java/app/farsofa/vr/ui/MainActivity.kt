@@ -45,6 +45,9 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.runtime.mutableIntStateOf
+import app.farsofa.vr.psn.CaBundle
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -119,6 +122,23 @@ class MainActivity : ComponentActivity() {
         var exchangingCode by remember { mutableStateOf(false) }
         var signInError by remember { mutableStateOf<String?>(null) }
         var pairing by remember { mutableStateOf<DiscoveredConsole?>(null) }
+        var remoteConsoles by remember { mutableStateOf<RemoteConsoles>(RemoteConsoles.Loading) }
+        var remoteAttempt by remember { mutableIntStateOf(0) }
+        // The account's consoles are asked for once per sign-in, and again when the player says so.
+        LaunchedEffect(account?.refreshToken, remoteAttempt) {
+            val signedIn = account ?: return@LaunchedEffect
+            remoteConsoles = RemoteConsoles.Loading
+            remoteConsoles = try {
+                val valid = PsnAuth.fresh(signedIn)
+                if (valid !== signedIn) { psnStore.save(valid); account = valid }
+                withContext(Dispatchers.IO) {
+                    CaBundle.ensure(this@MainActivity)
+                    RemoteConsoles.parse(Native.psnListDevices(valid.accessToken))
+                }
+            } catch (e: Exception) {
+                RemoteConsoles.Failed(e.message ?: "sign-in")
+            }
+        }
         var wakingId by remember { mutableStateOf<String?>(null) }
         var notice by remember { mutableStateOf(intent.getStringExtra(EXTRA_NOTICE)) }
 
@@ -205,6 +225,20 @@ class MainActivity : ComponentActivity() {
                         row.registered?.let { consoleStore.remove(it.id) }
                         registered = consoleStore.all()
                     },
+                    remote = remoteConsoles,
+                    onPlayRemote = { console ->
+                        notice = null
+                        scope.launch {
+                            try {
+                                val valid = PsnAuth.fresh(currentAccount)
+                                if (valid !== currentAccount) { psnStore.save(valid); account = valid }
+                                playRemote(console.duid, valid)
+                            } catch (e: Exception) {
+                                remoteConsoles = RemoteConsoles.Failed(e.message ?: "sign-in")
+                            }
+                        }
+                    },
+                    onRefreshRemote = { remoteAttempt++ },
                     onLearnPad = {
                         learnDevice = null
                         learner = PadLearner()
@@ -294,6 +328,17 @@ class MainActivity : ComponentActivity() {
     private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         afterPermission?.invoke()
         afterPermission = null
+    }
+
+    private fun playRemote(consoleDuid: String, account: PsnAccount) {
+        val target = if (packageManager.hasSystemFeature(FEATURE_STANDALONE_VR)) ImmersiveActivity::class.java else StreamActivity::class.java
+        val intent = StreamSession.remoteIntent(this, target, consoleDuid, account.accessToken, account.accountId)
+        if (target == ImmersiveActivity::class.java) {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            finishAndRemoveTask()
+        } else {
+            startActivity(intent)
+        }
     }
 
     private fun play(host: String, console: RegisteredConsole) {

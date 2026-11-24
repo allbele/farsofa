@@ -210,3 +210,26 @@ class PadMappingTest {
         assertEquals(-1, source.sign)
     }
 }
+
+class RemoteConsolesTest {
+    private val duid = "ab".repeat(32)
+
+    @Test
+    fun aListOfConsolesIsRead() {
+        val found = app.farsofa.vr.ui.RemoteConsoles.parse(arrayOf("ok", "$duid\tSala\t1", "$duid\t\t0", "short\tX\t1"))
+        found as app.farsofa.vr.ui.RemoteConsoles.Found
+        assertEquals(2, found.consoles.size)
+        assertEquals("Sala", found.consoles[0].name)
+        assertEquals(true, found.consoles[0].enabled)
+        // A console with no name still gets a row, and one with Remote Play off is shown as such.
+        assertEquals("PS5", found.consoles[1].name)
+        assertEquals(false, found.consoles[1].enabled)
+    }
+
+    @Test
+    fun aFailureKeepsItsReason() {
+        val failed = app.farsofa.vr.ui.RemoteConsoles.parse(arrayOf("error", "Network error"))
+        assertEquals("Network error", (failed as app.farsofa.vr.ui.RemoteConsoles.Failed).reason)
+        assertEquals("no answer", (app.farsofa.vr.ui.RemoteConsoles.parse(null) as app.farsofa.vr.ui.RemoteConsoles.Failed).reason)
+    }
+}

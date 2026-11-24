@@ -83,6 +83,10 @@ object PsnAuth {
         )
     }
 
+    /** [account] itself while its token still has [marginMs] to live, else a renewed one. */
+    suspend fun fresh(account: PsnAccount, marginMs: Long = 10 * 60 * 1000L): PsnAccount =
+        if (account.expiresAtMs - System.currentTimeMillis() > marginMs) account else refresh(account)
+
     suspend fun refresh(account: PsnAccount): PsnAccount = withContext(Dispatchers.IO) {
         val tokens = postForm(
             "grant_type" to "refresh_token",

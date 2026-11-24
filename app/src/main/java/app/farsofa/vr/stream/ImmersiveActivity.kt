@@ -21,7 +21,9 @@ import app.farsofa.vr.ui.MainActivity
 import app.farsofa.vr.xr.BarAction
 import app.farsofa.vr.xr.BarItem
 import app.farsofa.vr.xr.ControlBar
+import app.farsofa.vr.xr.Panel
 import app.farsofa.vr.xr.PanelRenderer
+import app.farsofa.vr.xr.PinPad
 import app.farsofa.vr.xr.Ray
 import app.farsofa.vr.xr.Scene
 import app.farsofa.vr.xr.ScreenHit
@@ -77,6 +79,12 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     private var mode = Mode.PLAYING
     private var bar = ControlBar(presets, layout)
+
+    // While the console waits for its login passcode, the pad takes the bar's place.
+    private var pinPad: PinPad? = null
+    private var pinDigits = ""
+    private var pinIncorrect = false
+    private val panel: Panel get() = pinPad ?: bar
     private var placement = Scene.placeBar(layout, allowLift = false)
 
     // Gamepad focus and pointer hover both highlight a control; the pointer wins while it is on the bar.
@@ -198,7 +206,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         get() = pointerSeen && (mode == Mode.CONTROLS || nearFrame || (grab != null && grab != Grab.Item))
 
     private fun drawPanels() {
-        if (mode == Mode.CONTROLS) barSurface?.let {
+        val pad = pinPad
+        if (mode == Mode.CONTROLS && pad != null) barSurface?.let {
+            renderer.drawPin(it, pad, pinDigits.length, pinIncorrect, hover ?: focus, held != null || grab == Grab.Item, barCursor)
+        } else if (mode == Mode.CONTROLS) barSurface?.let {
             renderer.drawBar(
                 it, bar, presets, layout, follow, confirmingReset, hover ?: focus, held != null || grab == Grab.Item, barCursor,
             )
@@ -214,7 +225,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         val focused = focus?.action
         bar = ControlBar(presets, layout)
         // The save slot turns into a remove slot and back, so the focused control may no longer exist.
-        focus = focused?.let { bar.find(it) ?: bar.items.last { item -> item.row == 0 } }
+        focus = focused?.let { panel.find(it) ?: if (pinPad == null) bar.items.last { item -> item.row == 0 } else null }
         pushScene()
         drawPanels()
     }
@@ -234,7 +245,19 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         update(layout)
     }
 
+    /** The console asked for its login passcode: show the pad until four digits are in. */
+    private fun openPin(incorrect: Boolean) {
+        if (leaving || barSurface == null) return
+        Diagnostics.event("passcode requested incorrect=$incorrect")
+        pinPad = PinPad()
+        pinDigits = ""
+        pinIncorrect = incorrect
+        if (mode == Mode.CONTROLS) update(layout) else openControls()
+    }
+
     private fun closeControls() {
+        if (pinPad != null && pinDigits.length < PinPad.LENGTH) return // the console is still waiting
+        pinPad = null
         Diagnostics.event("controls closed layout=$layout")
         stopHolding()
         mode = Mode.PLAYING
@@ -255,6 +278,19 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             handler.removeCallbacks(cancelReset)
         }
         when (action) {
+            is BarAction.Digit -> {
+                if (pinDigits.length < PinPad.LENGTH) pinDigits += action.value
+                if (pinDigits.length == PinPad.LENGTH) {
+                    stream.setLoginPin(pinDigits)
+                    closeControls()
+                } else {
+                    drawPanels()
+                }
+            }
+            BarAction.Backspace -> {
+                pinDigits = pinDigits.dropLast(1)
+                drawPanels()
+            }
             BarAction.ResetPresets -> {
                 handler.removeCallbacks(cancelReset)
                 if (confirmingReset) {
@@ -363,7 +399,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             val onBar = if (controls && (grab == null || grab == Grab.Item)) Scene.hitBar(placement, ray) else null
             barCursor = onBar
             val onScreen = if (onBar == null) Scene.hitScreen(layout, lift, ray) else null
-            hover = onBar?.let { bar.itemAt(it.first, it.second) }
+            hover = onBar?.let { panel.itemAt(it.first, it.second) }
 
             when (val current = grab) {
                 null -> {
@@ -534,7 +570,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     override fun onStreamConnected() = Unit
 
-    override fun onLoginPinRequest(incorrect: Boolean) = leave(getString(R.string.immersive_login_pin))
+    override fun onLoginPinRequest(incorrect: Boolean) = openPin(incorrect)
 
     override fun onStreamEnded(error: String?) =
         leave(error?.let { getString(R.string.stream_ended_error, it) })
@@ -554,16 +590,16 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
         if (released and PadState.CROSS != 0) stopHolding()
         when {
-            pressed and PadState.CIRCLE != 0 -> closeControls()
+            pressed and PadState.CIRCLE != 0 -> if (pinPad != null) perform(BarAction.Backspace) else closeControls()
             pressed and PadState.CROSS != 0 -> focus?.let { startHolding(it.action) }
             pressed and PadState.DPAD_MASK != 0 -> {
                 val from = focus
                 focus = when {
-                    from == null -> bar.find(BarAction.Larger)
-                    pressed and PadState.DPAD_LEFT != 0 -> bar.neighbour(from, -1, 0)
-                    pressed and PadState.DPAD_RIGHT != 0 -> bar.neighbour(from, 1, 0)
-                    pressed and PadState.DPAD_UP != 0 -> bar.neighbour(from, 0, -1)
-                    else -> bar.neighbour(from, 0, 1)
+                    from == null -> panel.find(BarAction.Larger) ?: panel.items.first()
+                    pressed and PadState.DPAD_LEFT != 0 -> panel.neighbour(from, -1, 0)
+                    pressed and PadState.DPAD_RIGHT != 0 -> panel.neighbour(from, 1, 0)
+                    pressed and PadState.DPAD_UP != 0 -> panel.neighbour(from, 0, -1)
+                    else -> panel.neighbour(from, 0, 1)
                 }
                 drawPanels()
             }

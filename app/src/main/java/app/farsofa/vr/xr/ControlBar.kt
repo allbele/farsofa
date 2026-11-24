@@ -20,6 +20,10 @@ sealed interface BarAction {
     data object ToggleCurve : BarAction
     data object ToggleBackground : BarAction
     data object ToggleFollow : BarAction
+
+    /** A digit of the console's login passcode. */
+    data class Digit(val value: Int) : BarAction
+    data object Backspace : BarAction
     data object Leave : BarAction
     data object Close : BarAction
 
@@ -43,12 +47,34 @@ data class BarReadout(val kind: Kind, val box: Box) {
     enum class Kind { SIZE, DISTANCE }
 }
 
+/** A set of controls laid out on the bar's surface, reachable with a pointer or with gamepad focus. */
+abstract class Panel {
+    abstract val items: List<BarItem>
+
+    fun itemAt(x: Float, y: Float): BarItem? = items.firstOrNull { it.box.contains(x, y) }
+
+    fun find(action: BarAction): BarItem? = items.firstOrNull { it.action == action }
+
+    /**
+     * The control a gamepad lands on when moving from [from] by one step. [dx] moves along the row and
+     * [dy] to the control closest above (-1) or below (+1); a move with nowhere to go stays put.
+     */
+    fun neighbour(from: BarItem, dx: Int, dy: Int): BarItem {
+        if (dx != 0) {
+            val row = items.filter { it.row == from.row }
+            return row.getOrNull(row.indexOf(from) + dx) ?: from
+        }
+        val row = items.filter { it.row == from.row + dy }
+        return row.minByOrNull { abs(it.box.centerX - from.box.centerX) } ?: from
+    }
+}
+
 /**
  * Layout of the control bar in the pixel space of its surface. Three rows: the player's presets, the
  * screen adjustments, and the console buttons that the Touch controllers lack.
  */
-class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) {
-    val items: List<BarItem>
+class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) : Panel() {
+    override val items: List<BarItem>
     val readouts: List<BarReadout>
 
     /** Index of the preset the current layout matches, or -1 when it has been changed by hand. */
@@ -95,23 +121,6 @@ class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) {
         readouts = shown
     }
 
-    fun itemAt(x: Float, y: Float): BarItem? = items.firstOrNull { it.box.contains(x, y) }
-
-    fun find(action: BarAction): BarItem? = items.firstOrNull { it.action == action }
-
-    /**
-     * The control a gamepad lands on when moving from [from] by one step. [dx] moves along the row and
-     * [dy] to the control closest above (-1) or below (+1); a move with nowhere to go stays put.
-     */
-    fun neighbour(from: BarItem, dx: Int, dy: Int): BarItem {
-        if (dx != 0) {
-            val row = items.filter { it.row == from.row }
-            return row.getOrNull(row.indexOf(from) + dx) ?: from
-        }
-        val row = items.filter { it.row == from.row + dy }
-        return row.minByOrNull { abs(it.box.centerX - from.box.centerX) } ?: from
-    }
-
     companion object {
         const val PADDING = 24f
         const val GAP = 16f
@@ -146,5 +155,37 @@ class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) {
             while (presets.any { it.name.equals("$base $number", ignoreCase = true)}) number++
             return "$base $number"
         }
+    }
+}
+
+/**
+ * The pad for the console's four-digit login passcode, drawn where the control bar goes: a line that
+ * says what is being asked, the ten digits, and delete or disconnect.
+ */
+class PinPad : Panel() {
+    override val items: List<BarItem>
+
+    /** Where the prompt and the entered digits are shown. */
+    val prompt = Box(ControlBar.PADDING, ControlBar.ROW_TOPS[0], Scene.BAR_PX_WIDTH - ControlBar.PADDING, ControlBar.ROW_TOPS[0] + ControlBar.ROW_HEIGHTS[0])
+
+    init {
+        val built = mutableListOf<BarItem>()
+        val inner = Scene.BAR_PX_WIDTH - 2 * ControlBar.PADDING
+        val digitWidth = (inner - ControlBar.GAP * 9) / 10f
+        val top = ControlBar.ROW_TOPS[1]
+        for (index in 0 until 10) {
+            val left = ControlBar.PADDING + index * (digitWidth + ControlBar.GAP)
+            built += BarItem(BarAction.Digit((index + 1) % 10), 1, Box(left, top, left + digitWidth, top + ControlBar.ROW_HEIGHTS[1]))
+        }
+        val half = (inner - ControlBar.GAP) / 2f
+        val bottomTop = ControlBar.ROW_TOPS[2]
+        val bottom = bottomTop + ControlBar.ROW_HEIGHTS[2]
+        built += BarItem(BarAction.Backspace, 2, Box(ControlBar.PADDING, bottomTop, ControlBar.PADDING + half, bottom))
+        built += BarItem(BarAction.Leave, 2, Box(ControlBar.PADDING + half + ControlBar.GAP, bottomTop, Scene.BAR_PX_WIDTH - ControlBar.PADDING, bottom))
+        items = built
+    }
+
+    companion object {
+        const val LENGTH = 4
     }
 }

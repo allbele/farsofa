@@ -34,7 +34,6 @@
     <string name="stream_login_pin_title">Enter the console\'s login passcode</string>
     <string name="stream_login_pin_incorrect">Wrong passcode. Try again</string>
     <string name="immersive_failed">Couldn\'t start the immersive screen.</string>
-    <string name="immersive_login_pin">This console asks for a login passcode, which the immersive screen can\'t show yet. Turn the passcode off on the console and try again.</string>
     <string name="welcome_browser_sign_in">Sign-in page not loading? Use the browser instead</string>
     <string name="browser_login_title">Sign in with the browser</string>
     <string name="browser_login_step_1">1. Open the sign-in page in the browser and sign in. When it finishes you\'ll land on a blank page.</string>
@@ -62,4 +61,5 @@
     <string name="bar_position_follow">Follows me</string>
     <string name="bar_reset_presets">Restore defaults</string>
     <string name="bar_reset_confirm">Confirm?</string>
+    <string name="bar_backspace">Delete</string>
 </resources>

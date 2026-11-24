@@ -100,6 +100,49 @@ class PanelRenderer(private val context: Context) {
         if (cursor != null) cursor(canvas, cursor.first, cursor.second)
     }
 
+    /** The passcode pad: what is being asked, how many digits are in, and the keys. */
+    fun drawPin(surface: Surface, pad: PinPad, entered: Int, incorrect: Boolean, highlighted: BarItem?, pressed: Boolean, cursor: Pair<Float, Float>?) =
+        draw(surface, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT) { canvas ->
+            panel(canvas, 0f, 0f, Scene.BAR_PX_WIDTH.toFloat(), Scene.BAR_PX_HEIGHT.toFloat())
+
+            val message = string(if (incorrect) R.string.stream_login_pin_incorrect else R.string.stream_login_pin_title)
+            text.textSize = 36f
+            text.color = if (incorrect) DANGER else TEXT
+            text.textAlign = Paint.Align.LEFT
+            canvas.drawText(message, pad.prompt.left + 12f, pad.prompt.centerY + 13f, text)
+            text.textAlign = Paint.Align.CENTER
+            // One ring per digit, filled as they are typed; the digits themselves are never shown.
+            for (index in 0 until PinPad.LENGTH) {
+                val x = pad.prompt.right - 40f - (PinPad.LENGTH - 1 - index) * 64f
+                if (index < entered) {
+                    fill.color = TEXT
+                    canvas.drawCircle(x, pad.prompt.centerY, 17f, fill)
+                } else {
+                    stroke.color = MUTED
+                    stroke.strokeWidth = 4f
+                    canvas.drawCircle(x, pad.prompt.centerY, 16f, stroke)
+                }
+            }
+
+            for (item in pad.items) {
+                val isHighlighted = item == highlighted
+                fill.color = if (isHighlighted && pressed) ACCENT else if (isHighlighted) CONTROL_HOVER else CONTROL
+                rect.set(item.box.left, item.box.top, item.box.right, item.box.bottom)
+                canvas.drawRoundRect(rect, CORNER, CORNER, fill)
+                if (isHighlighted) {
+                    stroke.color = ACCENT
+                    stroke.strokeWidth = 4f
+                    canvas.drawRoundRect(rect, CORNER, CORNER, stroke)
+                }
+                when (val action = item.action) {
+                    is BarAction.Digit -> label(canvas, item.box, action.value.toString(), 56f, TEXT)
+                    BarAction.Backspace -> label(canvas, item.box, string(R.string.bar_backspace), 34f, TEXT)
+                    else -> label(canvas, item.box, string(R.string.bar_leave), 34f, DANGER)
+                }
+            }
+            if (cursor != null) cursor(canvas, cursor.first, cursor.second)
+        }
+
     /** A single line of help shown where the bar would be. */
     fun drawHint(surface: Surface, message: String) = draw(surface, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT) { canvas ->
         text.textSize = 40f

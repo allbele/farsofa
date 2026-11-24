@@ -33,7 +33,6 @@
     <string name="stream_login_pin_title">Digite a senha de login do console</string>
     <string name="stream_login_pin_incorrect">Senha incorreta. Tente de novo</string>
     <string name="immersive_failed">Não foi possível iniciar a tela imersiva.</string>
-    <string name="immersive_login_pin">Este console pede uma senha de login, que a tela imersiva ainda não consegue mostrar. Desative a senha no console e tente de novo.</string>
     <string name="welcome_browser_sign_in">A página de login não carrega? Entre pelo navegador</string>
     <string name="browser_login_title">Entrar pelo navegador</string>
     <string name="browser_login_step_1">1. Abra a página de login no navegador e entre. Ao terminar, você cai em uma página em branco.</string>
@@ -61,4 +60,5 @@
     <string name="bar_position_follow">Me segue</string>
     <string name="bar_reset_presets">Restaurar padrões</string>
     <string name="bar_reset_confirm">Confirmar?</string>
+    <string name="bar_backspace">Apagar</string>
 </resources>

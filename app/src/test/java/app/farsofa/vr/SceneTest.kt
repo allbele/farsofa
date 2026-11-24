@@ -158,4 +158,19 @@ class SceneTest {
         assertEquals(BarAction.Close, bar.neighbour(leave, 0, 1).action)
         assertEquals(leave, bar.neighbour(bar.neighbour(leave, 0, 1), 0, 1).let { bar.neighbour(it, 0, -1) })
     }
+
+    @Test
+    fun thePasscodePadHasEveryDigitOnceAndFitsTheBar() {
+        val pad = app.farsofa.vr.xr.PinPad()
+        val digits = pad.items.mapNotNull { (it.action as? BarAction.Digit)?.value }
+        assertEquals((0..9).toList(), digits.sorted())
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 0), digits)
+        for (item in pad.items) {
+            assertTrue(item.box.left >= 0f && item.box.right <= Scene.BAR_PX_WIDTH + 0.01f)
+            assertTrue(item.box.top >= pad.prompt.bottom && item.box.bottom <= Scene.BAR_PX_HEIGHT)
+        }
+        val five = pad.find(BarAction.Digit(5))!!
+        assertEquals(BarAction.Digit(6), pad.neighbour(five, 1, 0).action)
+        assertEquals(BarAction.Backspace, pad.neighbour(pad.find(BarAction.Digit(2))!!, 0, 1).action)
+    }
 }

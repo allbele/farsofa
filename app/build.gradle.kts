@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,6 +12,13 @@ val venvPython = rootProject.file(".venv/bin/python")
 
 // OpenSSL's makefiles break on spaces in paths, so native build output lives outside the project folder.
 val nativeBuildDir = File(System.getProperty("user.home"), ".cache/farsofa/cxx")
+
+// Release signing reads keystore.properties in the project root (never committed). Without that
+// file a release build is left unsigned, so anyone can still build the app from source.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 
 android {
     namespace = "app.farsofa.vr"
@@ -81,9 +90,21 @@ android {
         }
     }
 
+    signingConfigs {
+        if (keystoreProperties.containsKey("storeFile")) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 }

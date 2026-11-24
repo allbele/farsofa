@@ -3,6 +3,7 @@
 package app.farsofa.vr.core
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.hardware.Sensor
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -23,12 +24,17 @@ object Diagnostics {
     private var lastLost = 0.0
     private var lastBytes = 0.0
 
+    /** Test builds only; a release build stays quiet. Set when a session starts. */
+    private var enabled = false
+
     fun event(message: String) {
-        Log.i(TAG, message)
+        if (enabled) Log.i(TAG, message)
     }
 
     /** One block describing the headset, the network and every controller Android can see. */
     fun sessionStarted(context: Context) {
+        enabled = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!enabled) return
         lastFrames = 0.0
         lastLost = 0.0
         lastBytes = 0.0
@@ -43,7 +49,7 @@ object Diagnostics {
     }
 
     fun streamStats(context: Context, stats: DoubleArray) {
-        if (stats.size < 7) return
+        if (!enabled || stats.size < 7) return
         val seconds = STATS_INTERVAL_MS / 1000.0
         val fps = (stats[3] - lastFrames) / seconds
         val lost = stats[4] - lastLost

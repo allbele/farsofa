@@ -129,4 +129,15 @@
     <string name="consoles_remote_off">Remote Play is off on this console</string>
     <string name="console_play_remote">Play over the internet</string>
     <string name="consoles_local_empty">No console found on this network yet.</string>
+    <string name="guide_open">How to prepare the console</string>
+    <string name="guide_title">Before you start, on the console</string>
+    <string name="guide_intro">This is done once, with the console on a TV. After that the TV is not needed.</string>
+    <string name="guide_done">Got it</string>
+    <string-array name="guide_steps">
+        <item>Sign in on the console with the same PlayStation Network account you used here.</item>
+        <item>Open Settings › System › Remote Play and turn on \"Enable Remote Play\".</item>
+        <item>To start it from rest mode: Settings › System › Power Saving › Features Available in Rest Mode, and turn on \"Stay Connected to the Internet\" and \"Enable Turning On PS5 from Network\".</item>
+        <item>On this network: when the console shows up here, choose Pair. On the console open Settings › System › Remote Play › Link Device and type the 8-digit code it shows.</item>
+        <item>Away from home there is no code: the console appears under \"Over the internet\" by itself.</item>
+    </string-array>
 </resources>

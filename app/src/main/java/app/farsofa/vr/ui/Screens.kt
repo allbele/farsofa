@@ -248,6 +248,11 @@ fun ConsoleListScreen(
     onSignOut: () -> Unit,
 ) {
     var controllerOpen by remember { mutableStateOf(false) }
+    // Shown by itself the first time, while there is no console to play on yet; after that, on request.
+    val context = LocalContext.current
+    val guidePrefs = remember { context.getSharedPreferences("guide", android.content.Context.MODE_PRIVATE) }
+    var guideOpen by remember { mutableStateOf(rows.none { it.registered != null } && !guidePrefs.getBoolean("seen", false)) }
+    if (guideOpen) SetupGuideDialog(onDismiss = { guideOpen = false; guidePrefs.edit().putBoolean("seen", true).apply() })
     Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -269,7 +274,12 @@ fun ConsoleListScreen(
         Spacer(Modifier.height(20.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { SectionTitle(stringResource(R.string.consoles_local), null) }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) { SectionTitle(stringResource(R.string.consoles_local), null) }
+                    TextButton(onClick = { guideOpen = true }) { Text(stringResource(R.string.guide_open)) }
+                }
+            }
             if (rows.isEmpty()) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
@@ -329,6 +339,33 @@ fun ConsoleListScreen(
             }
         }
     }
+}
+
+/** What has to be switched on at the console before any of this works, in the order it is done. */
+@Composable
+fun SetupGuideDialog(onDismiss: () -> Unit) {
+    val steps = stringArrayResource(R.array.guide_steps)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.guide_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.guide_intro), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                steps.forEachIndexed { index, step ->
+                    Row(Modifier.padding(vertical = 6.dp)) {
+                        Box(
+                            Modifier.size(28.dp).clip(CircleShape).background(Accent),
+                            contentAlignment = Alignment.Center,
+                        ) { Text((index + 1).toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+                        Spacer(Modifier.width(12.dp))
+                        Text(step, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.guide_done)) } },
+    )
 }
 
 @Composable

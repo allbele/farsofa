@@ -128,4 +128,15 @@
     <string name="consoles_remote_off">O Uso Remoto está desligado neste console</string>
     <string name="console_play_remote">Jogar pela internet</string>
     <string name="consoles_local_empty">Nenhum console encontrado nesta rede ainda.</string>
+    <string name="guide_open">Como preparar o console</string>
+    <string name="guide_title">Antes de começar, no console</string>
+    <string name="guide_intro">Isto se faz uma vez, com o console ligado a uma TV. Depois a TV não é mais necessária.</string>
+    <string name="guide_done">Entendi</string>
+    <string-array name="guide_steps">
+        <item>Entre no console com a mesma conta da PlayStation Network que você usou aqui.</item>
+        <item>Abra Configurações › Sistema › Uso Remoto e ligue \"Ativar o Uso Remoto\".</item>
+        <item>Para ligar a partir do repouso: Configurações › Sistema › Economia de Energia › Recursos Disponíveis no Modo de Repouso, e ligue \"Permanecer Conectado à Internet\" e \"Ativar a Ligação do PS5 pela Rede\".</item>
+        <item>Nesta rede: quando o console aparecer aqui, escolha Parear. No console, abra Configurações › Sistema › Uso Remoto › Vincular Dispositivo e digite o código de 8 dígitos exibido.</item>
+        <item>Fora de casa não há código: o console aparece sozinho em \"Pela internet\".</item>
+    </string-array>
 </resources>

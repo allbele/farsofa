@@ -62,4 +62,5 @@
     <string name="bar_reset_presets">Restore defaults</string>
     <string name="bar_reset_confirm">Confirm?</string>
     <string name="bar_backspace">Delete</string>
+    <string name="streaming_notice">The picture is streamed from your own console. A fast, stable Wi-Fi connection is required.</string>
 </resources>

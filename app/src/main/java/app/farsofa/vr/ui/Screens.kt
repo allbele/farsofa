@@ -96,7 +96,16 @@ fun WelcomeScreen(error: String?, onSignIn: () -> Unit, onBrowserSignIn: () -> U
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(max = 520.dp),
         )
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(10.dp))
+        // The store asks streaming apps to say so, and that a good connection is needed, when they open.
+        Text(
+            stringResource(R.string.streaming_notice),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 520.dp),
+        )
+        Spacer(Modifier.height(28.dp))
         Button(onClick = onSignIn, modifier = Modifier.height(56.dp).widthIn(min = 280.dp)) {
             Text(stringResource(R.string.welcome_sign_in), fontSize = 18.sp)
         }
@@ -234,6 +243,7 @@ fun ConsoleListScreen(
             )
             TextButton(onClick = onSignOut) { Text(stringResource(R.string.sign_out)) }
         }
+        Text(stringResource(R.string.streaming_notice), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
         if (notice != null) {
             Spacer(Modifier.height(8.dp))
             Text(notice, color = MaterialTheme.colorScheme.error)

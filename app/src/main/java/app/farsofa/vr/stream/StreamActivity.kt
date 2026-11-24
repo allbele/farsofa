@@ -104,7 +104,7 @@ class StreamActivity : ComponentActivity(), StreamSession.Callbacks, SurfaceHold
 
     override fun onStreamEnded(error: String?) {
         if (isFinishing) return
-        if (error != null) fail(getString(R.string.stream_ended_error, error)) else finish()
+        if (error != null) fail(error) else finish()
     }
 
     override fun onLeaveRequested() = finish()

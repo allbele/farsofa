@@ -140,4 +140,12 @@
         <item>Fora de casa não há código: o console aparece sozinho em \"Pela internet\".</item>
     </string-array>
     <string name="consoles_local_hint">Use esta em casa, com o headset no mesmo Wi-Fi do console.</string>
+    <string name="quit_restart">O console não completou a conexão. Reinicie o console (desligue por completo e ligue de novo) e tente outra vez.</string>
+    <string name="quit_in_use">O console diz que o Uso Remoto já está em uso por outro aparelho. Feche a outra conexão e tente de novo. Se não houver outra, reinicie o console.</string>
+    <string name="quit_refused">O console recusou a conexão. Veja se o Uso Remoto está ligado no console e se ele ainda está vinculado a este headset.</string>
+    <string name="quit_version">O console pede uma versão mais nova deste app. Atualize o Farsofa.</string>
+    <string name="quit_disconnected">O console encerrou a conexão. Isso acontece quando alguém começa a usar o console com a mesma conta.</string>
+    <string name="quit_remote_link">Não foi possível vincular pela internet. Veja se o console está na mesma conta da PlayStation que você usou aqui.</string>
+    <string name="quit_other">A conexão caiu. Se isso se repetir, reinicie o console e tente outra vez.</string>
+    <string name="quit_remote_failed">Não foi possível conectar pela internet (%1$s). Veja o guia \"Como preparar o console\"; se já estiver tudo ligado, reinicie o console e tente outra vez.</string>
 </resources>

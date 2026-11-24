@@ -642,7 +642,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     override fun onLoginPinRequest(incorrect: Boolean) = openPin(incorrect)
 
     override fun onStreamEnded(error: String?) =
-        leave(error?.let { getString(R.string.stream_ended_error, it) })
+        leave(error)
 
     override fun onLeaveRequested() = leave(null)
 

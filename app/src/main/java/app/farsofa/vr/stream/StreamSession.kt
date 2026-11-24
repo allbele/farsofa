@@ -17,6 +17,7 @@ import android.view.MotionEvent
 import android.view.Surface
 import app.farsofa.vr.console.RegisteredConsole
 import app.farsofa.vr.core.Diagnostics
+import app.farsofa.vr.R
 import app.farsofa.vr.core.Native
 import app.farsofa.vr.psn.CaBundle
 import app.farsofa.vr.input.DualSenseLink
@@ -234,7 +235,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
                 activity.runOnUiThread {
                     if (!isOpen) return@runOnUiThread
                     if (error.isEmpty() && Native.sessionStart(session)) return@runOnUiThread
-                    callbacks.onStreamEnded(error.ifEmpty { "start" })
+                    callbacks.onStreamEnded(activity.getString(R.string.quit_remote_failed, error.ifEmpty { "start" }))
                 }
             }, "farsofa-remote").also { it.start() }
         }
@@ -369,7 +370,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
 
     override fun onQuit(reason: Int, isError: Boolean, name: String?, detail: String?) = activity.runOnUiThread {
         Diagnostics.event("stream quit reason=$reason error=$isError name=$name detail=$detail")
-        if (isOpen) callbacks.onStreamEnded(if (isError) detail ?: name ?: reason.toString() else null)
+        if (isOpen) callbacks.onStreamEnded(if (isError) explain(reason) else null)
     }
 
     override fun onRumble(left: Int, right: Int) = activity.runOnUiThread {
@@ -427,6 +428,25 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     override fun onMotionReset() = Diagnostics.event("motion reset")
 
     override fun onHaptics(pcm: ByteArray) = padLink.pushHaptics(pcm)
+
+    /**
+     * Why the console ended the connection, said the way a player can act on. The numbers are the
+     * library's quit reasons; the number is kept at the end for whoever is asked for help.
+     */
+    private fun explain(reason: Int): String {
+        val text = when (reason) {
+            4 -> R.string.quit_in_use
+            3, 9 -> R.string.quit_refused
+            6 -> R.string.quit_version
+            11 -> R.string.quit_disconnected
+            13 -> R.string.quit_remote_link
+            // The console accepted the connection and then went silent. Seen in testing after the
+            // console had been left in rest mode for long; only restarting it brought it back.
+            2, 5, 7, 8, 10 -> R.string.quit_restart
+            else -> R.string.quit_other
+        }
+        return activity.getString(text) + " (" + reason + ")"
+    }
 
     private var rumblesLogged = 0
     private var triggersLogged = 0

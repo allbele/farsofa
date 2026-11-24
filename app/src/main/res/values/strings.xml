@@ -141,4 +141,12 @@
         <item>Away from home there is no code: the console appears under \"Over the internet\" by itself.</item>
     </string-array>
     <string name="consoles_local_hint">Use this at home, with the headset on the same Wi-Fi as the console.</string>
+    <string name="quit_restart">The console did not complete the connection. Restart the console (turn it fully off and on again) and try once more.</string>
+    <string name="quit_in_use">The console says Remote Play is already in use by another device. Close the other connection and try again. If there is none, restart the console.</string>
+    <string name="quit_refused">The console refused the connection. Check that Remote Play is on at the console and that it is still linked to this headset.</string>
+    <string name="quit_version">The console asks for a newer version of this app. Update Farsofa.</string>
+    <string name="quit_disconnected">The console ended the connection. This happens when someone starts using the console with the same account.</string>
+    <string name="quit_remote_link">Could not link over the internet. Check that the console is on the same PlayStation account you used here.</string>
+    <string name="quit_other">The connection dropped. If it keeps happening, restart the console and try again.</string>
+    <string name="quit_remote_failed">Could not connect over the internet (%1$s). See \"How to prepare the console\"; if everything is already on, restart the console and try again.</string>
 </resources>

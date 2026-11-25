@@ -13,6 +13,8 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 
+#include "motion_flow.h"
+
 #include <cstdint>
 #include <vector>
 
@@ -40,8 +42,10 @@ class SmoothVideo
 		void Render(JNIEnv *env);
 
 		/**
-		 * How eagerly frames are made up: 1 only where the picture moves and only while it moves,
-		 * 2 where it moves but in calm scenes too, 3 the whole picture all the time.
+		 * How frames are made up. 1: guessed ahead, only in the parts of the picture that move.
+		 * 2: guessed ahead over the whole picture. 3: each real picture is held back until the next
+		 * one arrives and the ones shown in between are built from both, so nothing is a guess; it
+		 * looks smoother, above all in motion that keeps changing, and costs one picture of delay.
 		 */
 		void SetLevel(int level) { level_ = level; }
 		/** Pictures shown in the last full second: real ones, and ones made up. */
@@ -63,6 +67,13 @@ class SmoothVideo
 		void UpdateMask();
 		void Blend(GLuint target);
 		bool PredictionTakesEffect(float scale);
+		bool BetweenWorks();
+		void RenderBetween(bool real, int64_t now);
+		void Copy(GLuint source, GLuint target);
+		float BlockDifference(GLuint a, GLuint b);
+		void MakeGuides();
+		void SelfTest(const char *when);
+		int frames_drawn_ = 0;
 		GLuint Acquire();
 		void Release();
 		void DrawVideo(GLuint target, bool write_history);
@@ -107,6 +118,39 @@ class SmoothVideo
 		int history_newest_ = -1;
 		int history_count_ = 0;
 		bool shown_predicted_ = false;
+
+		// Pictures built between two real ones (level 3).
+		GLuint copy_framebuffer_ = 0;
+		bool between_checked_ = false;
+		bool between_works_ = false;
+		int between_tries_ = 0;
+		bool between_shows_newest_ = false;
+		// The chip only carries a picture forwards from a pair. To carry the older real picture
+		// towards the newer one, it is given a made-up picture of what came before the older one
+		// (and the mirror of that for the newer): the motion it then finds is the real one.
+		GLuint guides_[2] = {0, 0};
+
+		// The motion worked out here, for level 3: see motion_flow.h.
+		MotionFlow flow_;
+		bool flow_ready_ = false;
+		bool flow_current_ = false;
+		int between_probe_ = 0;
+		int between_step_shown_ = -1;
+		// When the newest real picture is taken to have arrived: its real arrival with the jitter of
+		// the network and the decoder smoothed out, so that pictures are shown evenly spaced.
+		int64_t steady_time_ns_ = 0;
+		int64_t steady_before_ns_ = 0;
+		int ahead_ = 0;
+		int between_refreshes_ = 0;
+		int between_nudges_ = 0;
+		int troubled_ = 0;
+		void DumpPicture(GLuint texture, int set, const char *name);
+		int dumps_ = 0;
+		int64_t dump_time_ns_ = 0;
+		int between_holds_[6] = {0};
+		double estimate_ms_ = 0.0;
+		int estimates_ = 0;
+		bool guides_current_ = false;
 
 		// Where the picture is moving. A prediction covers the whole picture, and in the parts that
 		// stand still (the map, the crosshair, text, fine static detail) it can only do harm, so the

@@ -60,6 +60,10 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     var remote = false
         private set
     private var remoteThread: Thread? = null
+
+    /** The library's reason for the last end of the connection; 4 is "Remote Play already in use". */
+    var lastQuitReason = 0
+        private set
     private var started = false
     private val handler = Handler(Looper.getMainLooper())
     private val teardown = Executors.newSingleThreadExecutor()
@@ -379,6 +383,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
 
     override fun onQuit(reason: Int, isError: Boolean, name: String?, detail: String?) = activity.runOnUiThread {
         Diagnostics.event("stream quit reason=$reason error=$isError name=$name detail=$detail")
+        lastQuitReason = reason
         if (isOpen) callbacks.onStreamEnded(if (isError) explain(reason) else null)
     }
 

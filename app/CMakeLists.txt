@@ -23,6 +23,7 @@ add_library(farsofa SHARED
         src/main/cpp/core/bridge.cpp
         src/main/cpp/xr/xr_screen.cpp
         src/main/cpp/xr/smooth_video.cpp
+        src/main/cpp/xr/motion_flow.cpp
         src/main/cpp/video/video_decoder.cpp
         "${CHIAKI_ANDROID_CPP}/audio-decoder.c"
         src/main/cpp/audio/audio_output.cpp

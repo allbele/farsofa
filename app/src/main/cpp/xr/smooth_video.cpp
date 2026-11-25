@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
+#include <sys/system_properties.h>
+#include <unistd.h>
+#include <cstdio>
+#include <cstring>
+#include <climits>
 #include "smooth_video.h"
 
 #include <GLES2/gl2ext.h>
@@ -214,6 +219,10 @@ bool clear_exception(JNIEnv *env)
 
 } // namespace
 
+namespace { bool st_enabled(); }
+
+namespace { bool st_enabled(); }
+
 bool SmoothVideo::Create(JNIEnv *env, XrSession session, int width, int height)
 {
 	width_ = width;
@@ -250,6 +259,10 @@ bool SmoothVideo::Create(JNIEnv *env, XrSession session, int width, int height)
 	}
 	LOGI("Smooth video ready: %dx%d, format 0x%x, frame prediction %s", width_, height_, format_,
 			extrapolate_ ? "available" : "not available on this device");
+	if(extrapolate_)
+		flow_ready_ = flow_.Create(width_, height_);
+	if(st_enabled())
+		SelfTest("at start");
 
 	// A layer may only show a swapchain that has had a picture released into it.
 	GLuint first = Acquire();
@@ -539,6 +552,15 @@ void SmoothVideo::Destroy(JNIEnv *env)
 	glDeleteTextures(1, &grid_texture_);
 	glDeleteTextures(1, &external_texture_);
 	glDeleteFramebuffers(1, &framebuffer_);
+	if(guides_[0])
+		glDeleteTextures(2, guides_);
+	guides_[0] = guides_[1] = 0;
+	if(flow_ready_)
+		flow_.Destroy();
+	flow_ready_ = false;
+	if(copy_framebuffer_)
+		glDeleteFramebuffers(1, &copy_framebuffer_);
+	copy_framebuffer_ = 0;
 	glDeleteFramebuffers(1, &grid_framebuffer_);
 	glDeleteVertexArrays(1, &vertex_array_);
 	glDeleteProgram(video_program_);
@@ -704,8 +726,7 @@ void SmoothVideo::Render(JNIEnv *env)
 				moving_ = true;
 			else if(motion_level_ < MOTION_OFF)
 				moving_ = false;
-			if(level_ >= 2)
-				moving_ = true; // from level 2 up, calm scenes are predicted too
+			moving_ = true; // calm scenes get frames too: switching in and out of it showed as uneven motion
 
 			int64_t interval = now - real_time_ns_;
 			if(interval > 4000000 && interval < 100000000)
@@ -725,8 +746,14 @@ void SmoothVideo::Render(JNIEnv *env)
 		}
 	}
 
-	if(real)
+	bool between = predicting && level_ >= 3 && flow_ready_;
+	if(between)
 	{
+		RenderBetween(real, now);
+	}
+	else if(real)
+	{
+		between_shows_newest_ = false;
 		GLuint target = Acquire();
 		if(target)
 		{
@@ -745,7 +772,7 @@ void SmoothVideo::Render(JNIEnv *env)
 		double period = std::min(std::max(period_ns_, PERIOD_MIN_NS), PERIOD_MAX_NS);
 		float scale = static_cast<float>(static_cast<double>(now - real_time_ns_) / period);
 		bool predict = predicting && history_count_ >= 2 && moving_ && pair_adjacent_ && scale > 0.05f && scale <= 1.0f;
-		if(predict && mask_ready_ && level_ < 3)
+		if(predict && mask_ready_ && level_ < 2)
 		{
 			if(!extrapolate_checked_)
 			{
@@ -827,6 +854,648 @@ void SmoothVideo::Render(JNIEnv *env)
 	}
 	if(now - report_time_ns_ >= 10000000000LL)
 		Report();
+}
+
+void SmoothVideo::Copy(GLuint source, GLuint target)
+{
+	if(!copy_framebuffer_)
+		glGenFramebuffers(1, &copy_framebuffer_);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, copy_framebuffer_);
+	glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, source, 0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
+	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target, 0);
+	const GLenum one = GL_COLOR_ATTACHMENT0;
+	glDrawBuffers(1, &one);
+	glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// How far apart two pictures are over a block in the middle, in steps out of 255.
+float SmoothVideo::BlockDifference(GLuint a, GLuint b)
+{
+	const int size = 96;
+	static uint8_t block[2][size * size * 4];
+	const GLuint textures[2] = {a, b};
+	if(!copy_framebuffer_)
+		glGenFramebuffers(1, &copy_framebuffer_);
+	glBindFramebuffer(GL_FRAMEBUFFER, copy_framebuffer_);
+	for(int i = 0; i < 2; i++)
+	{
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[i], 0);
+		glReadPixels((width_ - size) / 2, (height_ - size) / 2, size, size, GL_RGBA, GL_UNSIGNED_BYTE, block[i]);
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	int64_t sum = 0;
+	for(int i = 0; i < size * size * 4; i++)
+		sum += std::abs(static_cast<int>(block[0][i]) - static_cast<int>(block[1][i]));
+	return static_cast<float>(sum) / static_cast<float>(size * size * 4);
+}
+
+// Test builds, with "adb shell setprop debug.farsofa.selftest 1": what the chip's frame prediction
+// really does, measured on pictures made here whose motion is known to the pixel. Everything goes
+// to the log; nothing of it is shown.
+namespace {
+const int ST_PAD = 256;
+const int ST_VPAD = 64;
+const int ST_BLOCK_W = 256;
+const int ST_BLOCK_H = 32;
+
+uint32_t st_hash(uint32_t x, uint32_t y, uint32_t seed)
+{
+	uint32_t h = x * 374761393u + y * 668265263u + seed * 2246822519u;
+	h = (h ^ (h >> 13)) * 1274126177u;
+	return h ^ (h >> 16);
+}
+
+float st_noise(float x, float y, uint32_t seed)
+{
+	int xi = static_cast<int>(x), yi = static_cast<int>(y);
+	float fx = x - xi, fy = y - yi;
+	float a = (st_hash(xi, yi, seed) & 255) / 255.0f, b = (st_hash(xi + 1, yi, seed) & 255) / 255.0f;
+	float c = (st_hash(xi, yi + 1, seed) & 255) / 255.0f, d = (st_hash(xi + 1, yi + 1, seed) & 255) / 255.0f;
+	return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+}
+
+bool st_enabled()
+{
+	char value[PROP_VALUE_MAX] = {0};
+	return __system_property_get("debug.farsofa.selftest", value) > 0 && value[0] == '1';
+}
+}
+
+void SmoothVideo::SelfTest(const char *when)
+{
+	if(!extrapolate_)
+		return;
+	const int bw = width_ + 2 * ST_PAD, bh = height_ + 2 * ST_VPAD;
+	std::vector<uint8_t> base(static_cast<size_t>(bw) * bh * 4);
+	for(int y = 0; y < bh; y++)
+		for(int x = 0; x < bw; x++)
+		{
+			float v = 0.5f * st_noise(x / 96.0f, y / 96.0f, 1) + 0.3f * st_noise(x / 24.0f, y / 24.0f, 2) + 0.2f * st_noise(x / 6.0f, y / 6.0f, 3);
+			uint8_t *px = &base[(static_cast<size_t>(y) * bw + x) * 4];
+			px[0] = static_cast<uint8_t>(v * 255);
+			px[1] = static_cast<uint8_t>((0.6f * v + 0.4f * st_noise(x / 48.0f, y / 48.0f, 4)) * 255);
+			px[2] = static_cast<uint8_t>((0.6f * v + 0.4f * st_noise(x / 40.0f, y / 40.0f, 5)) * 255);
+			px[3] = 255;
+		}
+
+	GLuint tex[5];
+	glGenTextures(5, tex);
+	for(GLuint t : tex)
+	{
+		glBindTexture(GL_TEXTURE_2D, t);
+		glTexStorage2D(GL_TEXTURE_2D, 1, format_, width_, height_);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	GLuint A = tex[0], B = tex[1], OUT = tex[2], G = tex[3], G2 = tex[4];
+
+	// The picture, moved right by [mx] and down by [my] pixels.
+	auto upload = [&](GLuint t, int mx, int my) {
+		glBindTexture(GL_TEXTURE_2D, t);
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, bw);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE,
+				&base[(static_cast<size_t>(ST_VPAD - my) * bw + (ST_PAD - mx)) * 4]);
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	};
+	// How far right (or down, when [vertical]) the picture in [t] sits, and how well that fits (0 is exact).
+	auto measure = [&](GLuint t, bool vertical, float *residual, int cx = -1, int cy = -1) {
+		static uint8_t block[ST_BLOCK_W * ST_BLOCK_H * 4];
+		int x0 = (cx < 0 ? width_ / 2 : cx) - ST_BLOCK_W / 2, y0 = (cy < 0 ? height_ / 2 : cy) - ST_BLOCK_H / 2;
+		if(!copy_framebuffer_)
+			glGenFramebuffers(1, &copy_framebuffer_);
+		glBindFramebuffer(GL_FRAMEBUFFER, copy_framebuffer_);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+		glReadPixels(x0, y0, ST_BLOCK_W, ST_BLOCK_H, GL_RGBA, GL_UNSIGNED_BYTE, block);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		int best = 0;
+		int64_t best_sum = INT64_MAX;
+		int range = vertical ? ST_VPAD - 4 : ST_PAD - 8;
+		for(int m = -range; m <= range; m++)
+		{
+			int64_t sum = 0;
+			for(int y = 0; y < ST_BLOCK_H; y += 2)
+				for(int x = 0; x < ST_BLOCK_W; x += 2)
+				{
+					int sx = x0 + x + ST_PAD - (vertical ? 0 : m), sy = y0 + y + ST_VPAD - (vertical ? m : 0);
+					sum += std::abs(static_cast<int>(block[(y * ST_BLOCK_W + x) * 4]) - static_cast<int>(base[(static_cast<size_t>(sy) * bw + sx) * 4]));
+				}
+			if(sum < best_sum)
+			{
+				best_sum = sum;
+				best = m;
+			}
+		}
+		*residual = static_cast<float>(best_sum) / (ST_BLOCK_W * ST_BLOCK_H / 4);
+		return best;
+	};
+	auto run = [&](GLuint older, GLuint newer, GLuint out, float scale, bool finish_before, bool finish_after) {
+		if(finish_before)
+			glFinish();
+		extrapolate_(older, newer, out, scale);
+		if(finish_after)
+			glFinish();
+	};
+
+	float r = 0;
+	LOGI("SelfTest (%s) begins: %dx%d, format 0x%x", when, width_, height_, format_);
+	while(glGetError() != GL_NO_ERROR) { }
+
+	// 0. The instrument itself.
+	upload(A, 0, 0);
+	upload(B, 8, 0);
+	int ma = measure(A, false, &r);
+	float ra = r;
+	int mb = measure(B, false, &r);
+	LOGI("SelfTest instrument: A reads %d (fit %.2f), B reads %d (fit %.2f); expected 0 and 8", ma, ra, mb, r);
+
+	// 1. Scales, with the output holding the newer picture beforehand (so "nothing done" reads 8).
+	for(float scale : {0.25f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f})
+	{
+		Copy(B, OUT);
+		run(A, B, OUT, scale, false, false);
+		int m = measure(OUT, false, &r);
+		LOGI("SelfTest scale %.2f, motion 8: expected %.1f, got %d (fit %.2f)", scale, 8 * (1 + scale), m, r);
+	}
+
+	// 2. How large a motion it follows, sideways and up and down.
+	for(int d : {1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96})
+	{
+		upload(B, d, 0);
+		Copy(B, OUT);
+		run(A, B, OUT, 0.5f, false, false);
+		int m = measure(OUT, false, &r);
+		LOGI("SelfTest motion %d sideways, scale 0.5: expected %.1f, got %d (fit %.2f)", d, d * 1.5f, m, r);
+	}
+	for(int d : {2, 8, 16, 32})
+	{
+		upload(B, 0, d);
+		Copy(B, OUT);
+		run(A, B, OUT, 0.5f, false, false);
+		int m = measure(OUT, true, &r);
+		LOGI("SelfTest motion %d downwards, scale 0.5: expected %.1f, got %d (fit %.2f)", d, d * 1.5f, m, r);
+	}
+	for(int d : {-8, -32})
+	{
+		upload(B, d, 0);
+		Copy(B, OUT);
+		run(A, B, OUT, 0.5f, false, false);
+		int m = measure(OUT, false, &r);
+		LOGI("SelfTest motion %d sideways, scale 0.5: expected %.1f, got %d (fit %.2f)", d, d * 1.5f, m, r);
+	}
+
+	// 3. Does it do the work every time? Twenty calls each way; a call "worked" if the picture moved on.
+	upload(B, 8, 0);
+	struct Way { const char *name; bool before, after, fresh, prefill, sleep; };
+	const Way ways[] = {
+		{"plain", false, false, false, true, false},
+		{"finish before", true, false, false, true, false},
+		{"finish after", false, true, false, true, false},
+		{"finish both", true, true, false, true, false},
+		{"new pictures each call", false, false, true, true, false},
+		{"new pictures each call, finish before", true, false, true, true, false},
+		{"output not filled first", false, false, false, false, false},
+		{"8 ms pause between calls", false, false, false, true, true},
+	};
+	for(const Way &way : ways)
+	{
+		int worked = 0, untouched = 0, other = 0;
+		int64_t started = now_ns();
+		char detail[128] = "";
+		for(int i = 0; i < 20; i++)
+		{
+			if(way.fresh)
+			{
+				upload(A, i, 0);
+				upload(B, i + 8, 0);
+			}
+			if(way.prefill)
+				Copy(B, OUT);
+			if(way.sleep)
+				usleep(8000);
+			run(A, B, OUT, 0.5f, way.before, way.after);
+			int m = measure(OUT, false, &r) - (way.fresh ? i : 0);
+			if(m >= 11 && m <= 13 && r < 6)
+				worked++;
+			else if(m == 8 && r < 1)
+				untouched++;
+			else
+				other++;
+			if(i < 6)
+				snprintf(detail + strlen(detail), sizeof(detail) - strlen(detail), " %d(%.0f)", m, r);
+		}
+		LOGI("SelfTest reliability, %s: %d worked, %d untouched, %d other, %.1f ms a round; first results%s", way.name, worked, untouched, other,
+				static_cast<double>(now_ns() - started) / 20e6, detail);
+		if(way.fresh)
+		{
+			upload(A, 0, 0);
+			upload(B, 8, 0);
+		}
+	}
+
+	// 4. What one call costs when waited for.
+	{
+		glFinish();
+		int64_t started = now_ns();
+		for(int i = 0; i < 10; i++)
+			run(A, B, OUT, 0.5f, false, true);
+		LOGI("SelfTest cost: %.2f ms a call", static_cast<double>(now_ns() - started) / 10e6);
+	}
+
+	// 5. Backwards, three ways.
+	Copy(B, OUT);
+	run(A, B, OUT, -0.5f, false, true);
+	int m = measure(OUT, false, &r);
+	LOGI("SelfTest negative scale -0.5: expected 4 if it goes back, 8 if ignored; got %d (fit %.2f)", m, r);
+	Copy(A, OUT);
+	run(B, A, OUT, 0.5f, false, true);
+	m = measure(OUT, false, &r);
+	LOGI("SelfTest swapped order (newer, older), scale 0.5: expected -4, 0 if ignored; got %d (fit %.2f)", m, r);
+	Copy(A, G);
+	run(B, A, G, 1.0f, false, true);
+	m = measure(G, false, &r);
+	LOGI("SelfTest guide (one step before the older): expected -8; got %d (fit %.2f)", m, r);
+	for(float along : {0.25f, 0.5f, 0.75f})
+	{
+		Copy(A, OUT);
+		run(G, A, OUT, along, false, true);
+		m = measure(OUT, false, &r);
+		LOGI("SelfTest in-between from a made-up guide, %.2f of the way: expected %.1f; got %d (fit %.2f)", along, 8 * along, m, r);
+	}
+	upload(G2, -8, 0);
+	for(float along : {0.25f, 0.5f, 0.75f})
+	{
+		Copy(A, OUT);
+		run(G2, A, OUT, along, false, true);
+		m = measure(OUT, false, &r);
+		LOGI("SelfTest in-between from an exact guide, %.2f of the way: expected %.1f; got %d (fit %.2f)", along, 8 * along, m, r);
+	}
+
+	// 6. Into an image of the swapchain, as the game picture is.
+	for(int i = 0; i < 3; i++)
+	{
+		GLuint target = Acquire();
+		if(!target)
+			break;
+		Copy(B, target);
+		run(A, B, target, 0.5f, false, false);
+		m = measure(target, false, &r);
+		Release();
+		LOGI("SelfTest into the swapchain, try %d: expected 12; got %d (fit %.2f)", i, m, r);
+	}
+
+	// 7. A picture of which only the left half moves: does the still half stay put?
+	{
+		std::vector<uint8_t> half(static_cast<size_t>(width_ / 2) * height_ * 4);
+		glBindFramebuffer(GL_FRAMEBUFFER, copy_framebuffer_);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, A, 0);
+		glReadPixels(width_ / 2, 0, width_ / 2, height_, GL_RGBA, GL_UNSIGNED_BYTE, half.data());
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindTexture(GL_TEXTURE_2D, B);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, width_ / 2, 0, width_ / 2, height_, GL_RGBA, GL_UNSIGNED_BYTE, half.data());
+		glBindTexture(GL_TEXTURE_2D, 0);
+		Copy(B, OUT);
+		run(A, B, OUT, 0.5f, false, true);
+		float r2 = 0;
+		int left = measure(OUT, false, &r, width_ / 4, height_ / 2);
+		int right = measure(OUT, false, &r2, 3 * width_ / 4, height_ / 2);
+		LOGI("SelfTest half moving: moving half expected 12, got %d (fit %.2f); still half expected 0, got %d (fit %.2f)", left, r, right, r2);
+	}
+
+	// 8. The motion worked out here.
+	if(flow_ready_)
+	{
+		upload(A, 0, 0);
+		struct Case { int mx, my; };
+		const Case cases[] = {{1, 0}, {3, 0}, {8, 0}, {20, 0}, {48, 0}, {96, 0}, {160, 0}, {220, 0}, {-64, 0}, {0, 6}, {0, 24}, {0, 48}, {40, 20}};
+		for(const Case &c : cases)
+		{
+			upload(B, c.mx, c.my);
+			glFinish();
+			int64_t started = now_ns();
+			flow_.Estimate(A, B);
+			glFinish();
+			double estimate = static_cast<double>(now_ns() - started) / 1e6;
+			for(float along : {0.25f, 0.5f, 0.75f})
+			{
+				started = now_ns();
+				flow_.Draw(OUT, A, B, along, true);
+				glFinish();
+				double draw = static_cast<double>(now_ns() - started) / 1e6;
+				bool vertical = c.mx == 0;
+				int got = measure(OUT, vertical, &r);
+				LOGI("SelfTest own motion (%d, %d), %.2f of the way: expected %.1f %s, got %d (fit %.2f); found in %.2f ms, drawn in %.2f ms",
+						c.mx, c.my, along, (vertical ? c.my : c.mx) * along, vertical ? "down" : "sideways", got, r, estimate, draw);
+			}
+			flow_.Draw(OUT, A, B, 0.5f, false);
+			int ahead = measure(OUT, c.mx == 0, &r);
+			LOGI("SelfTest own motion (%d, %d), half a step ahead: expected %.1f, got %d (fit %.2f)", c.mx, c.my, (c.mx == 0 ? c.my : c.mx) * 1.5f, ahead, r);
+		}
+		// Only the left half moves.
+		upload(B, 24, 0);
+		{
+			std::vector<uint8_t> half(static_cast<size_t>(width_ / 2) * height_ * 4);
+			glBindFramebuffer(GL_FRAMEBUFFER, copy_framebuffer_);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, A, 0);
+			glReadPixels(width_ / 2, 0, width_ / 2, height_, GL_RGBA, GL_UNSIGNED_BYTE, half.data());
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glBindTexture(GL_TEXTURE_2D, B);
+			glTexSubImage2D(GL_TEXTURE_2D, 0, width_ / 2, 0, width_ / 2, height_, GL_RGBA, GL_UNSIGNED_BYTE, half.data());
+			glBindTexture(GL_TEXTURE_2D, 0);
+			flow_.Estimate(A, B);
+			flow_.Draw(OUT, A, B, 0.5f, true);
+			float r2 = 0;
+			int left = measure(OUT, false, &r, width_ / 4, height_ / 2);
+			int right = measure(OUT, false, &r2, 3 * width_ / 4, height_ / 2);
+			LOGI("SelfTest own motion, half moving 24: moving half expected 12, got %d (fit %.2f); still half expected 0, got %d (fit %.2f)", left, r, right, r2);
+		}
+	}
+	else
+	{
+		LOGE("SelfTest: own motion is not available on this device");
+	}
+
+	GLenum error = glGetError();
+	LOGI("SelfTest (%s) ends, GL error 0x%x", when, error);
+	glDeleteTextures(5, tex);
+}
+
+void SmoothVideo::MakeGuides()
+{
+	if(!guides_[0])
+	{
+		glGenTextures(2, guides_);
+		for(GLuint texture : guides_)
+		{
+			glBindTexture(GL_TEXTURE_2D, texture);
+			glTexStorage2D(GL_TEXTURE_2D, 1, format_, width_, height_);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		}
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+	GLuint older = history_[1 - history_newest_];
+	GLuint newer = history_[history_newest_];
+	Copy(older, guides_[0]);
+	extrapolate_(newer, older, guides_[0], 1.0f); // one step before the older picture
+	Copy(newer, guides_[1]);
+	extrapolate_(older, newer, guides_[1], 1.0f); // one step after the newer picture
+	guides_current_ = true;
+}
+
+// Building a picture between two real ones asks the graphics chip to carry the newer one backwards,
+// which its description does not promise. Tried once on two pictures that differ: the result has to
+// be something other than either of them. Returns false while there is nothing to tell from yet.
+bool SmoothVideo::BetweenWorks()
+{
+	GLuint older = history_[1 - history_newest_];
+	GLuint newer = history_[history_newest_];
+	float apart = BlockDifference(older, newer);
+	if(apart < 1.5f)
+	{
+		// Too alike to tell anything from (a menu, a loading screen): try on a later pair. If the
+		// picture is plainly moving and the two still read as equal, the reading itself is not to
+		// be trusted on this device; in-between frames are then used without the proof.
+		if(motion_level_ < 2.0f * MOTION_ON || apart > 0.01f || ++between_tries_ < 240)
+			return false;
+		between_checked_ = true;
+		between_works_ = true;
+		LOGE("In-between frames could not be checked (pictures read back as equal); using them unchecked");
+		return true;
+	}
+	between_checked_ = true;
+
+	if(!predicted_texture_)
+	{
+		LOGE("In-between frames: no spare picture to try on; using frames guessed ahead");
+		return true;
+	}
+	while(glGetError() != GL_NO_ERROR) { }
+	MakeGuides();
+	Copy(older, predicted_texture_);
+	extrapolate_(guides_[0], older, predicted_texture_, 0.5f);
+	GLenum error = glGetError();
+	// What each step did, for the log: the two guides against the pictures they were made from,
+	// and plain steps forward of half and of a whole picture for comparison.
+	float guide_back = BlockDifference(guides_[0], older);
+	float guide_on = BlockDifference(guides_[1], newer);
+	float guide_back_newer = BlockDifference(guides_[0], newer);
+	Copy(newer, guides_[1]);
+	extrapolate_(older, newer, guides_[1], 0.5f);
+	float half_on = BlockDifference(guides_[1], newer);
+	Copy(older, guides_[1]);
+	extrapolate_(newer, older, guides_[1], 0.5f);
+	float half_back = BlockDifference(guides_[1], older);
+	guides_current_ = false;
+	LOGI("In-between check: pair %.2f apart; guide before %.2f from older (%.2f from newer), guide after %.2f from newer; half step on %.2f, half step back %.2f",
+			apart, guide_back, guide_back_newer, guide_on, half_on, half_back);
+	float from_newer = BlockDifference(predicted_texture_, newer);
+	float from_older = BlockDifference(predicted_texture_, older);
+	// Half way there, the result is neither picture and is nearer the newer one than the older is.
+	between_works_ = error == GL_NO_ERROR && from_older > 0.1f * apart && from_newer > 0.05f * apart && from_newer < 0.95f * apart;
+	if(between_works_)
+		LOGI("In-between frames are working (pair %.1f apart; result %.1f from the older, %.1f from the newer)", apart, from_older, from_newer);
+	else
+		LOGE("In-between frames do nothing here (error 0x%x; pair %.1f apart; result %.1f from the older, %.1f from the newer); using frames guessed ahead",
+				error, apart, from_older, from_newer);
+	return true;
+}
+
+// Level 3. The newest real picture is kept back; what is shown runs one picture behind, from the
+// one before it towards it, so every picture made up lies between two that are known.
+// Level 3. What is on screen runs one game picture behind what has arrived, so that every picture
+// made up lies between two that are known; and it is paced by the clock, 60 a second, whatever the
+// game does. A game picture that comes late does not stop it: until it arrives the motion last
+// found is carried on, and when it does, the gap it left is filled with as many pictures as fit.
+void SmoothVideo::RenderBetween(bool real, int64_t now)
+{
+	const double slot = 1000000000.0 / 60.0;
+	const double half_refresh = 1000000000.0 / 240.0;
+	double period = std::min(std::max(period_ns_, PERIOD_MIN_NS), PERIOD_MAX_NS);
+
+	if(real)
+	{
+		int slot_index = history_newest_ == 0 ? 1 : 0;
+		DrawVideo(history_[slot_index], false);
+		history_newest_ = slot_index;
+		history_count_ = std::min(history_count_ + 1, 2);
+		drawn_once_ = true;
+		between_step_shown_ = -1000;
+		flow_current_ = false;
+		// When this picture is taken to have arrived: on time, the small wobble of the network and
+		// the decoder is smoothed out; late or early by more than that is the game itself, and kept.
+		int64_t expected = steady_time_ns_ + static_cast<int64_t>(period);
+		int64_t error = now - expected;
+		steady_before_ns_ = steady_time_ns_;
+		steady_time_ns_ = std::llabs(error) > static_cast<int64_t>(period * 0.3) ? now : expected + error / 32;
+		reals_++;
+		real_this_second_++;
+	}
+	if(!drawn_once_ || history_newest_ < 0)
+		return;
+
+	GLuint older = history_[1 - history_newest_];
+	GLuint newer = history_[history_newest_];
+	double gap = static_cast<double>(steady_time_ns_ - steady_before_ns_);
+	// A game already at 60 has nothing to add and is not held back. Nor is anything made across a
+	// cut or a pause.
+	bool pair = history_count_ >= 2 && period > 25000000.0 && gap > 20000000.0 && gap < 4.5 * period;
+	if(!pair)
+	{
+		if(between_step_shown_ == 0)
+			return;
+		GLuint target = Acquire();
+		if(target)
+		{
+			Copy(newer, target);
+			Release();
+			between_step_shown_ = 0;
+			shown_predicted_ = false;
+		}
+		return;
+	}
+
+	// The moment of the game to show now, counted in sixtieths of a second from the newer picture:
+	// negative between the two, zero the newer one itself, positive past it. Half a refresh is
+	// added so that the count never changes right on a refresh of the screen, where the slightest
+	// wobble would show one picture for one refresh and the next for three.
+	double wanted = static_cast<double>(now - steady_time_ns_) + half_refresh - period;
+	int step = static_cast<int>(std::floor(wanted / slot));
+	float along = 1.0f + static_cast<float>(static_cast<double>(step) * slot / gap);
+	if(step < 0 && along < 0.04f)
+	{
+		step = -999; // the older picture itself
+		along = 0.0f;
+	}
+	// Carried on for one game picture's worth at most; past that the guess is worth less than waiting.
+	float ahead = static_cast<float>(static_cast<double>(step) * slot / gap);
+	if(step > 0 && ahead > 1.01f)
+	{
+		step = 999;
+	}
+	if(step == between_step_shown_ || step == 999)
+	{
+		between_refreshes_++;
+		return; // already on screen
+	}
+	// Test builds: for how many refreshes of the screen each picture stayed up. Even is all twos.
+	between_holds_[std::min(between_refreshes_, 5)]++;
+	between_refreshes_ = 1;
+
+	GLuint target = Acquire();
+	if(!target)
+		return;
+	between_step_shown_ = step;
+	bool made = false;
+	if(step == -999)
+	{
+		Copy(older, target);
+	}
+	else if(step == 0)
+	{
+		Copy(newer, target);
+	}
+	else
+	{
+		if(!flow_current_)
+		{
+			flow_.Estimate(older, newer);
+			flow_current_ = true;
+		}
+		if(flow_.Unexplained())
+		{
+			// No motion explains how this pair differs (a fade, a menu sliding over): anything made
+			// from it would be a smear. It goes by as the game sent it.
+			Copy(step < 0 ? older : newer, target);
+			troubled_++;
+		}
+		else if(step < 0)
+		{
+			flow_.Draw(target, older, newer, along, true);
+			made = true;
+		}
+		else
+		{
+			flow_.Draw(target, older, newer, ahead, false);
+			made = true;
+			ahead_++;
+		}
+	}
+	if(made)
+	{
+		predicted_++;
+		predicted_this_second_++;
+		// Test builds: where the picture made up sits between the two real ones.
+		static const bool testing = st_enabled();
+		if(testing && ++between_probe_ % 15 == 0 && between_probe_ < 15 * 600)
+		{
+			float apart = BlockDifference(older, newer);
+			float from_older = BlockDifference(target, older);
+			float from_newer = BlockDifference(target, newer);
+			LOGI("Between probe: step %d (%.2f), gap %.0f ms, pair %.2f apart, result %.2f from the older, %.2f from the newer, trouble %.3f of %.3f unmoved, brighter %+.3f (%d pairs let by), %d carried on, motion found in %.2f ms; held for 1/2/3/4/5+ refreshes: %d %d %d %d %d",
+					step, step < 0 ? along : ahead, gap / 1000000.0, apart, from_older, from_newer, flow_.Trouble(), flow_.Unmoved(), flow_.Brighter(), troubled_, ahead_, estimate_ms_,
+					between_holds_[1], between_holds_[2], between_holds_[3], between_holds_[4], between_holds_[5]);
+			troubled_ = 0;
+			ahead_ = 0;
+			for(int &hold : between_holds_)
+				hold = 0;
+		}
+		// Test builds: now and then the two real pictures and the one made from them are saved, to be looked at.
+		if(testing && dumps_ < 12 && now - dump_time_ns_ > 8000000000LL && BlockDifference(older, newer) > 4.0f)
+		{
+			dump_time_ns_ = now;
+			DumpPicture(older, dumps_, "a");
+			DumpPicture(newer, dumps_, "b");
+			DumpPicture(target, dumps_, step < 0 ? "m" : "x");
+			dumps_++;
+		}
+	}
+	Release();
+	shown_predicted_ = made;
+	if(!flow_current_)
+	{
+		// Asked for only now, with this refresh's picture already handed over: the graphics chip
+		// works on it while that picture is up, and it is needed two refreshes from here.
+		int64_t started = now_ns();
+		flow_.Estimate(older, newer);
+		flow_current_ = true;
+		static const bool timing = st_enabled();
+		if(timing && ++estimates_ % 90 == 0)
+		{
+			glFinish();
+			estimate_ms_ = static_cast<double>(now_ns() - started) / 1000000.0;
+		}
+	}
+}
+
+void SmoothVideo::DumpPicture(GLuint texture, int set, const char *name)
+{
+	static std::vector<uint8_t> pixels;
+	pixels.resize(static_cast<size_t>(width_) * height_ * 4);
+	if(!copy_framebuffer_)
+		glGenFramebuffers(1, &copy_framebuffer_);
+	glBindFramebuffer(GL_FRAMEBUFFER, copy_framebuffer_);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+	glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	char path[128];
+	snprintf(path, sizeof(path), "/data/user/0/app.farsofa.vr/files/dump_%d_%s.raw", set, name);
+	FILE *file = fopen(path, "wb");
+	if(!file)
+	{
+		LOGE("Could not save %s", path);
+		return;
+	}
+	fwrite(pixels.data(), 1, pixels.size(), file);
+	fclose(file);
+	LOGI("Saved %s (%dx%d)", path, width_, height_);
 }
 
 void SmoothVideo::Report()

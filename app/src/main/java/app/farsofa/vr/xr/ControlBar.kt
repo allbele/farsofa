@@ -34,6 +34,10 @@ sealed interface BarAction {
     /** Flips one of the options, by its place in [OptionsPad.OPTIONS]. */
     data class ToggleOption(val index: Int) : BarAction
 
+    /** Picks how strong smooth motion is, 0 for off, from the list [SmoothPad] shows. */
+    data class SmoothChoice(val level: Int) : BarAction
+    data object CloseSmooth : BarAction
+
     /** Taps a console button the Touch controllers have no key for. */
     data class Press(val buttons: Int) : BarAction
 
@@ -115,13 +119,17 @@ class ControlBar(presets: List<ScreenPreset>, layout: ScreenLayout) : Panel() {
         built += BarItem(BarAction.ToggleFollow, 1, Box(groups[4].first, top, groups[4].second, bottom))
         built += BarItem(BarAction.Leave, 1, Box(groups[5].first, top, groups[5].second, bottom))
 
-        // Row 2: console buttons, then close.
+        // Row 2: the console's buttons, a gap, then what belongs to the app: its settings and close.
+        // The gap and a different look keep the console's "Options" apart from the app's own.
         val console = listOf(
             PadState.DPAD_LEFT, PadState.DPAD_UP, PadState.DPAD_DOWN, PadState.DPAD_RIGHT,
             PadState.SHARE, PadState.TOUCHPAD, PadState.PS, PadState.OPTIONS,
         ).map<Int, BarAction> { BarAction.Press(it) } + BarAction.OpenOptions + BarAction.Close
-        split(listOf(1f, 1f, 1f, 1f, 1.7f, 1.7f, 1.7f, 1.7f, 1.7f, 1.7f)).forEachIndexed { index, (left, right) ->
-            built += BarItem(console[index], 2, Box(left, ROW_TOPS[2], right, ROW_TOPS[2] + ROW_HEIGHTS[2]))
+        val spacer = 8
+        split(listOf(1f, 1f, 1f, 1f, 1.6f, 1.6f, 1.6f, 1.6f, 0.25f, 1.9f, 1.6f)).forEachIndexed { index, (left, right) ->
+            if (index == spacer) return@forEachIndexed
+            val action = console[if (index > spacer) index - 1 else index]
+            built += BarItem(action, 2, Box(left, ROW_TOPS[2], right, ROW_TOPS[2] + ROW_HEIGHTS[2]))
         }
 
         items = built
@@ -196,6 +204,37 @@ class OptionsPad : Panel() {
         const val OPTIONS = 6
         const val SMOOTH_MOTION = 4
         const val FRAME_COUNT = 5
+    }
+}
+
+/**
+ * The choices for smooth motion, opened from its box in the options: off and the three levels side
+ * by side, so the player sees all of them and where they are now before anything changes.
+ */
+class SmoothPad : Panel() {
+    override val items: List<BarItem>
+
+    val prompt = Box(ControlBar.PADDING, ControlBar.ROW_TOPS[0], Scene.BAR_PX_WIDTH - ControlBar.PADDING, ControlBar.ROW_TOPS[0] + ControlBar.ROW_HEIGHTS[0])
+
+    init {
+        val built = mutableListOf<BarItem>()
+        val inner = Scene.BAR_PX_WIDTH - 2 * ControlBar.PADDING
+        val width = (inner - ControlBar.GAP * LEVELS) / (LEVELS + 1)
+        val top = ControlBar.ROW_TOPS[1]
+        for (level in 0..LEVELS) {
+            val left = ControlBar.PADDING + level * (width + ControlBar.GAP)
+            built += BarItem(BarAction.SmoothChoice(level), 1, Box(left, top, left + width, top + ControlBar.ROW_HEIGHTS[1]))
+        }
+        val bottomTop = ControlBar.ROW_TOPS[2]
+        built += BarItem(
+            BarAction.CloseSmooth, 2,
+            Box(ControlBar.PADDING, bottomTop, Scene.BAR_PX_WIDTH - ControlBar.PADDING, bottomTop + ControlBar.ROW_HEIGHTS[2]),
+        )
+        items = built
+    }
+
+    companion object {
+        const val LEVELS = 3
     }
 }
 

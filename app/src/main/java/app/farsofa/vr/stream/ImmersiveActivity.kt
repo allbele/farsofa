@@ -27,6 +27,7 @@ import app.farsofa.vr.xr.ControlBar
 import app.farsofa.vr.xr.Panel
 import app.farsofa.vr.xr.PanelRenderer
 import app.farsofa.vr.xr.OptionsPad
+import app.farsofa.vr.xr.SmoothPad
 import app.farsofa.vr.xr.PinPad
 import app.farsofa.vr.xr.Ray
 import app.farsofa.vr.xr.Scene
@@ -91,7 +92,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private var optionsPad: OptionsPad? = null
     private var pinDigits = ""
     private var pinIncorrect = false
-    private val panel: Panel get() = pinPad ?: optionsPad ?: bar
+    private val panel: Panel get() = pinPad ?: smoothPad ?: optionsPad ?: bar
     private var placement = Scene.placeBar(layout, allowLift = false)
 
     // Gamepad focus and pointer hover both highlight a control; the pointer wins while it is on the bar.
@@ -208,40 +209,34 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         }
     }
 
-    // Switching smooth motion on or off rebuilds the screen and reconnects, so it is asked for twice.
-    // Between levels nothing is interrupted, so those change on a single press.
-    private var confirmingSmooth = false
-    private var smoothAskedAtTop = false
+    // Smooth motion is picked from a list of its own. Between levels nothing is interrupted, so
+    // those apply at once; switching it on or off rebuilds the screen and reconnects, so that
+    // choice has to be pressed twice, with the reason shown in between.
+    private var smoothPad: SmoothPad? = null
+    private var pendingSmooth: Int? = null
     private val cancelSmoothConfirm = Runnable {
-        confirmingSmooth = false
+        pendingSmooth = null
         drawPanels()
     }
 
-    private fun pressSmooth() {
-        val level = stream.smoothLevel
+    private fun chooseSmooth(level: Int) {
+        val current = stream.smoothLevel
+        handler.removeCallbacks(cancelSmoothConfirm)
         when {
-            confirmingSmooth -> {
-                confirmingSmooth = false
-                handler.removeCallbacks(cancelSmoothConfirm)
-                stream.smoothLevel = if (level > 0) 0 else stream.smoothLastLevel
+            level == current -> pendingSmooth = null
+            level > 0 && current > 0 -> {
+                pendingSmooth = null
+                stream.smoothLevel = level
+                XrNative.setSmoothLevel(xr, level)
+            }
+            pendingSmooth == level -> {
+                pendingSmooth = null
+                stream.smoothLevel = level
                 reconnect()
             }
-            level in 1..2 -> {
-                stream.smoothLevel = level + 1
-                smoothAskedAtTop = false
-                XrNative.setSmoothLevel(xr, level + 1)
-            }
-            // At the top level the next press offers to switch off; if that is let pass, the one after goes round to level 1.
-            level == 3 && smoothAskedAtTop -> {
-                stream.smoothLevel = 1
-                smoothAskedAtTop = false
-                XrNative.setSmoothLevel(xr, 1)
-            }
             else -> {
-                confirmingSmooth = true
-                smoothAskedAtTop = level == 3
-                handler.removeCallbacks(cancelSmoothConfirm)
-                handler.postDelayed(cancelSmoothConfirm, 6000)
+                pendingSmooth = level
+                handler.postDelayed(cancelSmoothConfirm, SMOOTH_CONFIRM_MS)
             }
         }
     }
@@ -250,10 +245,11 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
      * Ends this connection and opens it again with the same console, for a change that cannot be made
      * while the picture is up. The console needs a moment between the two or it answers "already in use".
      */
-    private fun reconnect() {
+    private fun reconnect(attempt: Int = 0) {
         if (leaving) return
         leaving = true
-        Diagnostics.event("reconnecting to apply an option")
+        intent.putExtra(EXTRA_RECONNECT_ATTEMPT, attempt)
+        Diagnostics.event("reconnecting, attempt $attempt")
         handler.removeCallbacksAndMessages(null)
         if (!demo) store.current = layout
         barSurface = null
@@ -262,7 +258,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         xr = 0L
         stream.release {
             if (session != 0L) XrNative.stop(session)
-            Thread.sleep(1500)
+            // The console keeps the old connection for a few seconds after it is told goodbye.
+            Thread.sleep(RECONNECT_WAIT_MS)
             runOnUiThread { recreate() }
         }
     }
@@ -325,9 +322,13 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         val pad = pinPad
         if (mode == Mode.CONTROLS && pad != null) barSurface?.let {
             renderer.drawPin(it, pad, pinDigits.length, pinIncorrect, hover ?: focus, held != null || grab == Grab.Item, barCursor)
+        } else if (mode == Mode.CONTROLS && smoothPad != null) barSurface?.let {
+            renderer.drawSmooth(
+                it, smoothPad!!, stream.smoothLevel, pendingSmooth, hover ?: focus, held != null || grab == Grab.Item, barCursor,
+            )
         } else if (mode == Mode.CONTROLS && optionsPad != null) barSurface?.let {
             renderer.drawOptions(
-                it, optionsPad!!, stream.options(), stream.smoothLevel, confirmingSmooth,
+                it, optionsPad!!, stream.options(), stream.smoothLevel,
                 hover ?: focus, held != null || grab == Grab.Item, barCursor,
             )
         } else if (mode == Mode.CONTROLS) barSurface?.let {
@@ -382,6 +383,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         if (pinPad != null && pinDigits.length < PinPad.LENGTH) return // the console is still waiting
         pinPad = null
         optionsPad = null
+        smoothPad = null
+        pendingSmooth = null
         Diagnostics.event("controls closed layout=$layout")
         stopHolding()
         mode = Mode.PLAYING
@@ -397,9 +400,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private fun perform(action: BarAction) {
         Diagnostics.event("bar action $action")
         // Any other press cancels a reset that was waiting to be confirmed.
-        val smoothPress = action is BarAction.ToggleOption && action.index == OptionsPad.SMOOTH_MOTION
-        if (!smoothPress && confirmingSmooth) {
-            confirmingSmooth = false
+        if (action !is BarAction.SmoothChoice && pendingSmooth != null) {
+            pendingSmooth = null
             handler.removeCallbacks(cancelSmoothConfirm)
         }
         if (action != BarAction.ResetPresets && confirmingReset) {
@@ -468,12 +470,24 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 hover = null
             }
             is BarAction.ToggleOption -> when (action.index) {
-                OptionsPad.SMOOTH_MOTION -> pressSmooth()
+                OptionsPad.SMOOTH_MOTION -> {
+                    val pad = SmoothPad()
+                    smoothPad = pad
+                    val now = pad.find(BarAction.SmoothChoice(stream.smoothLevel))
+                    focus = if (focus != null) now else null
+                    hover = null
+                }
                 OptionsPad.FRAME_COUNT -> {
                     stream.toggleOption(action.index)
                     updateFrameCount()
                 }
                 else -> stream.toggleOption(action.index)
+            }
+            is BarAction.SmoothChoice -> chooseSmooth(action.level)
+            BarAction.CloseSmooth -> {
+                smoothPad = null
+                focus = if (focus != null) optionsPad?.find(BarAction.ToggleOption(OptionsPad.SMOOTH_MOTION)) else null
+                hover = null
             }
             BarAction.Leave -> leave(null)
         }
@@ -729,6 +743,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     // --- Stream ---
 
     override fun onStreamConnected() {
+        intent.removeExtra(EXTRA_RECONNECT_ATTEMPT)
         XrNative.setSmoothLevel(xr, stream.smoothLevel.coerceAtLeast(1))
         handler.postDelayed({ updateFrameCount() }, HINT_MS + 500)
         if (leaving || mode != Mode.HINT) return
@@ -739,8 +754,16 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     override fun onLoginPinRequest(incorrect: Boolean) = openPin(incorrect)
 
-    override fun onStreamEnded(error: String?) =
+    override fun onStreamEnded(error: String?) {
+        // Coming straight back, the console may still count the connection that was just closed.
+        // That is not a failure to show the player: wait and try again a few times.
+        val attempt = intent.getIntExtra(EXTRA_RECONNECT_ATTEMPT, -1)
+        if (error != null && stream.lastQuitReason == QUIT_IN_USE && attempt in 0 until RECONNECT_TRIES) {
+            reconnect(attempt + 1)
+            return
+        }
         leave(error)
+    }
 
     override fun onLeaveRequested() = leave(null)
 
@@ -759,6 +782,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         when {
             pressed and PadState.CIRCLE != 0 -> when {
                 pinPad != null -> perform(BarAction.Backspace)
+                smoothPad != null -> perform(BarAction.CloseSmooth)
                 optionsPad != null -> perform(BarAction.CloseOptions)
                 else -> closeControls()
             }
@@ -814,6 +838,11 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private var rawMotionsLogged = 0
 
     companion object {
+        private const val EXTRA_RECONNECT_ATTEMPT = "reconnectAttempt"
+        private const val RECONNECT_WAIT_MS = 3500L
+        private const val RECONNECT_TRIES = 4
+        private const val QUIT_IN_USE = 4
+        private const val SMOOTH_CONFIRM_MS = 8000L
         /** Test builds only: show the bundled picture instead of connecting to a console. */
         const val EXTRA_DEMO = "demo"
 

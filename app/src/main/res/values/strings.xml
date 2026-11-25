@@ -108,9 +108,10 @@
     <string name="pad_learn_skip">Skip this one</string>
     <string name="pad_learn_reset">Back to standard</string>
     <string name="pad_learn_done">All set. The app will remember this gamepad.</string>
-    <string name="bar_options">Options</string>
+    <string name="bar_options">App settings</string>
+    <string name="bar_console_mark">CONTROLLER</string>
     <string name="bar_options_back">Back</string>
-    <string name="bar_options_hint">Smooth motion levels change at once. Switching it on or off reconnects the game.</string>
+    <string name="bar_options_hint">Choose what to change. Smooth motion opens its own list.</string>
     <string name="bar_option_triggers">TRIGGERS</string>
     <string name="bar_option_lights">LIGHTS</string>
     <string name="bar_option_motion">MOTION</string>
@@ -159,8 +160,13 @@
     <string name="report_sent_hint">If you ask for help at contato@allbele.com, quote this code so we can find your report.</string>
     <string name="bar_option_count">COUNTER</string>
     <string name="bar_option_level">Level %1$d</string>
-    <string name="frame_count">%1$d real + %2$d made up = %3$d pictures a second</string>
+    <string name="frame_count">%1$d from the game + %2$d made by the app (%3$d a second in all)</string>
     <string name="frame_count_off">Smooth motion is off: the game shows its own pictures only</string>
-    <string name="bar_smooth_confirm_off">Switch smooth motion off? The game will reconnect. Press again to confirm.</string>
-    <string name="bar_smooth_confirm_on">Switch smooth motion on? The game will reconnect. Press again to confirm.</string>
+    <string name="bar_smooth_hint">Levels 1 and 2 add no delay. Level 3 is the smoothest, with a slight delay on the controls.</string>
+    <string name="bar_smooth_confirm">This reconnects the game (a few seconds). Press the same choice again to confirm.</string>
+    <string name="bar_smooth_none">NO EFFECT</string>
+    <string name="bar_smooth_light">LIGHT</string>
+    <string name="bar_smooth_medium">STRONG</string>
+    <string name="bar_smooth_strong">SMOOTHEST</string>
+    <string name="bar_smooth_current">IN USE</string>
 </resources>

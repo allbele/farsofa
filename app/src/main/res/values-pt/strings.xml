@@ -107,9 +107,10 @@
     <string name="pad_learn_skip">Pular este</string>
     <string name="pad_learn_reset">Voltar ao padrão</string>
     <string name="pad_learn_done">Pronto. O app vai lembrar deste controle.</string>
-    <string name="bar_options">Opções</string>
+    <string name="bar_options">Ajustes do app</string>
+    <string name="bar_console_mark">CONTROLE</string>
     <string name="bar_options_back">Voltar</string>
-    <string name="bar_options_hint">Os níveis do movimento suave mudam na hora. Ligar ou desligar reconecta o jogo.</string>
+    <string name="bar_options_hint">Escolha o que quer mudar. O movimento suave abre uma lista própria.</string>
     <string name="bar_option_triggers">GATILHOS</string>
     <string name="bar_option_lights">LUZES</string>
     <string name="bar_option_motion">MOVIMENTO</string>
@@ -158,8 +159,13 @@
     <string name="report_sent_hint">Se for pedir ajuda em contato@allbele.com, informe este código para acharmos o seu relatório.</string>
     <string name="bar_option_count">CONTADOR</string>
     <string name="bar_option_level">Nível %1$d</string>
-    <string name="frame_count">%1$d reais + %2$d criados = %3$d imagens por segundo</string>
+    <string name="frame_count">%1$d do jogo + %2$d criados pelo app (%3$d por segundo no total)</string>
     <string name="frame_count_off">Movimento suave desligado: só as imagens do próprio jogo</string>
-    <string name="bar_smooth_confirm_off">Desligar o movimento suave? O jogo vai reconectar. Aperte de novo para confirmar.</string>
-    <string name="bar_smooth_confirm_on">Ligar o movimento suave? O jogo vai reconectar. Aperte de novo para confirmar.</string>
+    <string name="bar_smooth_hint">Níveis 1 e 2 não atrasam o controle. O nível 3 é o mais fluido, com um leve atraso.</string>
+    <string name="bar_smooth_confirm">Isso reconecta o jogo (alguns segundos). Aperte de novo na mesma opção para confirmar.</string>
+    <string name="bar_smooth_none">SEM EFEITO</string>
+    <string name="bar_smooth_light">LEVE</string>
+    <string name="bar_smooth_medium">FORTE</string>
+    <string name="bar_smooth_strong">MAIS FLUIDO</string>
+    <string name="bar_smooth_current">EM USO</string>
 </resources>

@@ -2,36 +2,36 @@
 <resources>
     <string name="cancel">Cancelar</string>
 
-    <string name="welcome_body">Jogue seu console em uma tela grande dentro do headset. Entre uma vez e o console aparece sozinho.</string>
-    <string name="welcome_sign_in">Entrar na PlayStation Network</string>
-    <string name="sign_in_failed">O login não foi concluído. Verifique a conexão e tente de novo.</string>
+    <string name="welcome_body">Jogue os jogos do seu console numa tela gigante dentro do headset, com a TV desligada. Você entra com a sua conta uma vez e o app encontra o console sozinho.</string>
+    <string name="welcome_sign_in">Entrar com a conta da PlayStation</string>
+    <string name="sign_in_failed">Não deu para entrar. Veja se o headset está com internet e tente de novo.</string>
     <string name="sign_out">Sair da conta</string>
-    <string name="login_title">Entrar na PlayStation Network</string>
+    <string name="login_title">Entrar com a conta da PlayStation</string>
 
     <string name="consoles_title">Seus consoles</string>
-    <string name="consoles_searching">Procurando consoles nesta rede…</string>
-    <string name="consoles_searching_hint">Ligue o console ou deixe-o em modo de repouso, na mesma rede Wi-Fi do headset.</string>
+    <string name="consoles_searching">Procurando o console no seu Wi-Fi…</string>
+    <string name="consoles_searching_hint">O console precisa estar ligado, ou em repouso (luz laranja), e no mesmo Wi-Fi do headset. É a primeira vez? Toque em \"Como preparar o console\".</string>
     <string name="console_ready">Ligado</string>
-    <string name="console_standby">Em modo de repouso</string>
-    <string name="console_offline">Fora desta rede</string>
+    <string name="console_standby">Em repouso (luz laranja)</string>
+    <string name="console_offline">Não encontrado neste Wi-Fi</string>
     <string name="console_waking">Ligando…</string>
-    <string name="console_pair">Parear</string>
+    <string name="console_pair">Vincular</string>
     <string name="console_play">Jogar</string>
     <string name="console_wake_and_play">Ligar e jogar</string>
-    <string name="console_forget">Esquecer</string>
-    <string name="wake_timeout">O console não ligou. Ligue-o e tente de novo.</string>
+    <string name="console_forget">Remover</string>
+    <string name="wake_timeout">O console não ligou sozinho. Ligue-o pelo botão e tente de novo.</string>
 
-    <string name="pair_title">Parear com %1$s</string>
-    <string name="pair_steps">No console, abra Configurações › Sistema › Uso Remoto › Vincular Dispositivo e digite aqui o código de 8 dígitos exibido.</string>
-    <string name="pair_code_label">Código de 8 dígitos</string>
-    <string name="pair_failed">O pareamento não funcionou. Confira o código, veja se o console está na mesma conta e tente de novo.</string>
+    <string name="pair_title">Vincular ao %1$s</string>
+    <string name="pair_steps">Isto só é pedido uma vez. Na TV, com o controle do console, abra Configurações › Sistema › Uso Remoto › Vincular Dispositivo. Vai aparecer um código de 8 números: digite-o aqui.</string>
+    <string name="pair_code_label">Código de 8 números</string>
+    <string name="pair_failed">Não funcionou. Confira os números e veja se o console está na mesma conta da PlayStation que você usou aqui. O código muda a cada tentativa.</string>
 
     <string name="stream_connecting">Conectando…</string>
-    <string name="stream_exit_hint">Segure L1 + R1 + Options para desconectar</string>
-    <string name="stream_failed_start">Não foi possível iniciar a conexão.</string>
-    <string name="stream_ended_error">A conexão terminou: %1$s</string>
-    <string name="stream_login_pin_title">Digite a senha de login do console</string>
-    <string name="stream_login_pin_incorrect">Senha incorreta. Tente de novo</string>
+    <string name="stream_exit_hint">Para sair: segure L1 + R1 + Options</string>
+    <string name="stream_failed_start">Não foi possível conectar ao console.</string>
+    <string name="stream_ended_error">A conexão caiu: %1$s</string>
+    <string name="stream_login_pin_title">Digite a senha de 4 números do seu perfil no console</string>
+    <string name="stream_login_pin_incorrect">Senha errada. Tente de novo</string>
     <string name="immersive_failed">Não foi possível iniciar a tela imersiva.</string>
     <string name="welcome_browser_sign_in">A página de login não carrega? Entre pelo navegador</string>
     <string name="browser_login_title">Entrar pelo navegador</string>
@@ -41,7 +41,7 @@
     <string name="browser_login_address_label">Endereço da página em branco</string>
     <string name="browser_login_rejected">Esse não é o endereço da página final. Ele começa com https://remoteplay.dl.playstation.net</string>
     <string name="browser_login_continue">Continuar</string>
-    <string name="immersive_hint">Botão PS ou Menu: ajustes da tela  ·  Segure L1 + R1 + Options para desconectar</string>
+    <string name="immersive_hint">Toque rápido no botão PS: ajustar a tela  ·  Para sair: segure L1 + R1 + Options</string>
     <string name="bar_save_preset">+ Salvar esta tela</string>
     <string name="bar_remove_preset">Remover %1$s</string>
     <string name="bar_preset_base">Tela</string>
@@ -61,5 +61,111 @@
     <string name="bar_reset_presets">Restaurar padrões</string>
     <string name="bar_reset_confirm">Confirmar?</string>
     <string name="bar_backspace">Apagar</string>
-    <string name="streaming_notice">A imagem é transmitida do seu próprio console. É preciso uma conexão Wi-Fi rápida e estável.</string>
+    <string name="streaming_notice">A imagem é transmitida do seu próprio console. Precisa de um Wi-Fi rápido e estável; perto do roteador funciona melhor.</string>
+    <string name="controller_title">Opções</string>
+    <string name="controller_intro">As quatro primeiras são para o DualSense (o controle do PS5) ligado ao headset por Bluetooth. Valem a partir da próxima vez que você conectar ao console.</string>
+    <string name="controller_triggers">Gatilhos adaptáveis</string>
+    <string name="controller_triggers_detail">Os gatilhos L2 e R2 endurecem ou tremem conforme o jogo, como no console.</string>
+    <string name="controller_lights">Luzes do controle</string>
+    <string name="controller_lights_detail">A luz do controle muda de cor como no console.</string>
+    <string name="controller_motion">Movimento e touchpad</string>
+    <string name="controller_motion_detail">Para jogos que pedem inclinar o controle ou deslizar o dedo no touchpad.</string>
+    <string name="controller_haptics">Vibração detalhada (em teste)</string>
+    <string name="controller_haptics_detail">A vibração mais rica dos jogos de PS5. Ainda em ajuste: pode atrasar ou ficar áspera.</string>
+    <string name="controller_done">Pronto</string>
+    <string name="option_smooth">Movimento suave (em teste)</string>
+    <string name="option_smooth_detail">Deixa mais fluidos os jogos que rodam a 30 quadros por segundo. Ainda em ajuste: em movimento rápido as bordas podem tremer.</string>
+    <string-array name="pad_controls">
+        <item>Cruz</item>
+        <item>Círculo</item>
+        <item>Quadrado</item>
+        <item>Triângulo</item>
+        <item>Direcional para a esquerda</item>
+        <item>Direcional para a direita</item>
+        <item>Direcional para cima</item>
+        <item>Direcional para baixo</item>
+        <item>L1</item>
+        <item>R1</item>
+        <item>L3 (aperte o analógico esquerdo)</item>
+        <item>R3 (aperte o analógico direito)</item>
+        <item>Options</item>
+        <item>Create</item>
+        <item>Clique do touchpad</item>
+        <item>PS</item>
+        <item>L2</item>
+        <item>R2</item>
+        <item>Analógico esquerdo: para a direita</item>
+        <item>Analógico esquerdo: para baixo</item>
+        <item>Analógico direito: para a direita</item>
+        <item>Analógico direito: para baixo</item>
+    </string-array>
+    <string name="pad_learn_open">Configurar outro controle</string>
+    <string name="pad_learn_title">Botões do controle</string>
+    <string name="pad_learn_waiting">Para um controle que não é da PlayStation ou que está com os botões trocados. Aperte qualquer botão dele para começar.</string>
+    <string name="pad_learn_prompt">No seu controle, aperte:</string>
+    <string name="pad_learn_step">%1$d de %2$d</string>
+    <string name="pad_learn_skip">Pular este</string>
+    <string name="pad_learn_reset">Voltar ao padrão</string>
+    <string name="pad_learn_done">Pronto. O app vai lembrar deste controle.</string>
+    <string name="bar_options">Ajustes do app</string>
+    <string name="bar_console_mark">CONTROLE</string>
+    <string name="bar_options_back">Voltar</string>
+    <string name="bar_options_hint">Escolha o que quer mudar. O movimento suave abre uma lista própria.</string>
+    <string name="bar_option_triggers">GATILHOS</string>
+    <string name="bar_option_lights">LUZES</string>
+    <string name="bar_option_motion">MOVIMENTO</string>
+    <string name="bar_option_haptics">VIBRAÇÃO FINA</string>
+    <string name="bar_option_smooth">MOV. SUAVE</string>
+    <string name="bar_option_on">Ligado</string>
+    <string name="bar_option_off">Desligado</string>
+    <string name="stream_connecting_remote">Conectando pela internet… pode levar até um minuto</string>
+    <string name="consoles_local">Nesta rede (melhor imagem, menos atraso)</string>
+    <string name="consoles_remote">Pela internet (mais atraso)</string>
+    <string name="consoles_remote_hint">Para jogar fora de casa. A imagem fica menos nítida e os comandos respondem um pouco depois do que em casa. O console precisa estar ligado, ou em repouso com \"Permanecer conectado à internet\" ativado.</string>
+    <string name="consoles_remote_loading">Procurando os consoles da sua conta…</string>
+    <string name="consoles_remote_empty">Nenhum console da sua conta está com o Uso Remoto ligado. Toque em \"Como preparar o console\".</string>
+    <string name="consoles_remote_error">Não foi possível consultar a sua conta agora (%1$s). Veja se o headset está com internet.</string>
+    <string name="consoles_remote_retry">Tentar de novo</string>
+    <string name="consoles_remote_off">Uso Remoto desligado neste console</string>
+    <string name="console_play_remote">Jogar pela internet</string>
+    <string name="consoles_local_empty">Nenhum console encontrado nesta rede ainda.</string>
+    <string name="guide_open">Como preparar o console</string>
+    <string name="guide_title">Antes de começar, no console</string>
+    <string name="guide_intro">Isto se faz uma vez, com o console ligado a uma TV. Depois a TV não é mais necessária.</string>
+    <string name="guide_done">Entendi</string>
+    <string-array name="guide_steps">
+        <item>Entre no console com a mesma conta da PlayStation Network que você usou aqui.</item>
+        <item>Abra Configurações › Sistema › Uso Remoto e ligue \"Ativar o Uso Remoto\".</item>
+        <item>Para ligar a partir do repouso: Configurações › Sistema › Economia de Energia › Recursos Disponíveis no Modo de Repouso, e ligue \"Permanecer Conectado à Internet\" e \"Ativar a Ligação do PS5 pela Rede\".</item>
+        <item>Nesta rede: quando o console aparecer aqui, toque em Vincular. No console, abra Configurações › Sistema › Uso Remoto › Vincular Dispositivo e digite o código de 8 dígitos exibido.</item>
+        <item>Fora de casa não há código: o console aparece sozinho em \"Pela internet\".</item>
+    </string-array>
+    <string name="consoles_local_hint">Use esta em casa, com o headset no mesmo Wi-Fi do console.</string>
+    <string name="quit_restart">O console não completou a conexão. Reinicie o console (desligue por completo e ligue de novo) e tente outra vez.</string>
+    <string name="quit_in_use">O console diz que o Uso Remoto já está em uso por outro aparelho. Feche a outra conexão e tente de novo. Se não houver outra, reinicie o console.</string>
+    <string name="quit_refused">O console recusou a conexão. Veja se o Uso Remoto está ligado no console e se ele ainda está vinculado a este headset.</string>
+    <string name="quit_version">O console pede uma versão mais nova deste app. Atualize o Farsofa.</string>
+    <string name="quit_disconnected">O console encerrou a conexão. Isso acontece quando alguém começa a usar o console com a mesma conta.</string>
+    <string name="quit_remote_link">Não foi possível vincular pela internet. Veja se o console está na mesma conta da PlayStation que você usou aqui.</string>
+    <string name="quit_other">A conexão caiu. Se isso se repetir, reinicie o console e tente outra vez.</string>
+    <string name="quit_remote_failed">Não foi possível conectar pela internet (%1$s). Veja o guia \"Como preparar o console\"; se já estiver tudo ligado, reinicie o console e tente outra vez.</string>
+    <string name="report_open">Algo deu errado? Enviar relatório de erro</string>
+    <string name="report_title">Enviar relatório de erro</string>
+    <string name="report_body">O app guarda no headset um diário técnico das últimas vezes que você jogou: o que funcionou, onde a conexão parou, a qualidade do Wi-Fi. Enviar esse diário ajuda a descobrir e corrigir o problema.</string>
+    <string name="report_privacy">Não vai junto: sua conta, sua senha, o nome do console, endereços da sua rede. Nada é enviado sem você tocar em Enviar.</string>
+    <string name="report_send">Enviar</string>
+    <string name="report_failed">Não foi possível enviar agora. Veja se o headset está com internet e tente de novo.</string>
+    <string name="report_sent">Relatório enviado. Este é o código dele:</string>
+    <string name="report_sent_hint">Se for pedir ajuda em contato@allbele.com, informe este código para acharmos o seu relatório.</string>
+    <string name="bar_option_count">CONTADOR</string>
+    <string name="bar_option_level">Nível %1$d</string>
+    <string name="frame_count">%1$d do jogo + %2$d criados pelo app (%3$d por segundo no total)</string>
+    <string name="frame_count_off">Movimento suave desligado: só as imagens do próprio jogo</string>
+    <string name="bar_smooth_hint">Níveis 1 e 2 não atrasam o controle. O nível 3 é o mais fluido, com um leve atraso.</string>
+    <string name="bar_smooth_confirm">Isso reconecta o jogo (alguns segundos). Aperte de novo na mesma opção para confirmar.</string>
+    <string name="bar_smooth_none">SEM EFEITO</string>
+    <string name="bar_smooth_light">LEVE</string>
+    <string name="bar_smooth_medium">FORTE</string>
+    <string name="bar_smooth_strong">MAIS FLUIDO</string>
+    <string name="bar_smooth_current">EM USO</string>
 </resources>

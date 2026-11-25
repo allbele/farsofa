@@ -7,8 +7,11 @@
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <sys/socket.h>
 
 #include <atomic>
+#include <mutex>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -17,6 +20,7 @@
 #include <chiaki/controller.h>
 #include <chiaki/discoveryservice.h>
 #include <chiaki/log.h>
+#include <chiaki/orientation.h>
 #include <chiaki/regist.h>
 #include <chiaki/remote/holepunch.h>
 #include <chiaki/session.h>
@@ -38,6 +42,7 @@ jobject jnistr_from_ascii(JNIEnv *env, const char *str);
 namespace {
 
 ChiakiLog g_log;
+std::string g_log_directory;
 
 // JNIEnv for the current thread; detaches on scope exit only if this scope attached it.
 struct ScopedEnv
@@ -210,6 +215,33 @@ struct Session
 	jmethodID on_login_pin_request;
 	jmethodID on_quit;
 	jmethodID on_rumble;
+	jmethodID on_trigger_effects;
+	jmethodID on_pad_light;
+	jmethodID on_pad_intensity;
+	jmethodID on_motion_reset;
+	jmethodID on_haptics;
+
+	// What the buttons and sticks last were, and where the controller's own motion sensors point.
+	// The two arrive on different threads and leave for the console as one state.
+	std::mutex controller_mutex;
+	ChiakiControllerState controller = {};
+	ChiakiOrientationTracker orientation = {};
+	ChiakiAccelNewZero accel_zero = {};
+	float accel_last[3] = {0.0f, 0.0f, 0.0f};
+	bool motion_active = false;
+	std::atomic<bool> forward_haptics{false};
+
+	// Until the library's own session exists, only the decoders and the listener may be touched.
+	// A console on the same network gets it at once; one reached through PSN only after the way
+	// through both routers has been opened, which takes a while and can fail.
+	std::atomic<bool> ready{false};
+	ChiakiConnectInfo info = {};
+	std::string host;
+	std::string psn_token;
+	uint8_t console_duid[32] = {};
+	std::mutex psn_mutex;
+	ChiakiHolepunchSession holepunch = nullptr; // ours until the library's session takes it over
+	bool psn_cancelled = false;
 
 	// Counted on the stream thread, read by the UI for diagnostics.
 	std::atomic<int64_t> video_frames{0};
@@ -245,6 +277,23 @@ void haptics_frame_cb(uint8_t *buf, size_t buf_size, void *user)
 	size_t frames = buf_size / 4;
 	if(frames == 0)
 		return;
+	if(session->forward_haptics.load())
+	{
+		// The controller's own actuators can play the waveform as it is.
+		ScopedEnv scoped;
+		if(!scoped.env)
+			return;
+		jbyteArray pcm = scoped.env->NewByteArray(static_cast<jsize>(frames * 4));
+		if(pcm)
+		{
+			scoped.env->SetByteArrayRegion(pcm, 0, static_cast<jsize>(frames * 4), reinterpret_cast<const jbyte *>(buf));
+			scoped.env->CallVoidMethod(session->listener, session->on_haptics, pcm);
+			scoped.env->DeleteLocalRef(pcm);
+		}
+		if(scoped.env->ExceptionCheck())
+			scoped.env->ExceptionClear();
+		return;
+	}
 	int64_t sum_left = 0, sum_right = 0;
 	for(size_t i = 0; i < frames; i++)
 	{
@@ -266,7 +315,10 @@ void haptics_frame_cb(uint8_t *buf, size_t buf_size, void *user)
 	session->haptic_frames_since_sent++;
 	bool stopped = left == 0 && right == 0 && (session->haptic_left != 0 || session->haptic_right != 0);
 	int change = std::abs(left - session->haptic_left) + std::abs(right - session->haptic_right);
-	if(!stopped && (change < 24 || session->haptic_frames_since_sent < 4))
+	// The console never says an effect is over, the waveform just ends. So a rumble that goes on is
+	// repeated a few times a second, and whoever plays it stops when the repeats do.
+	bool renew = (left != 0 || right != 0) && session->haptic_frames_since_sent >= 12;
+	if(!stopped && !renew && (change < 24 || session->haptic_frames_since_sent < 4))
 		return;
 	session->haptic_left = left;
 	session->haptic_right = right;
@@ -280,6 +332,26 @@ void haptics_frame_cb(uint8_t *buf, size_t buf_size, void *user)
 		scoped.env->ExceptionClear();
 }
 
+// The library asks the system for a receive buffer of 100 KB, which a single large frame overflows:
+// packets are dropped inside the headset, the frame cannot be rebuilt, the console is asked for a
+// key frame, and the key frame is larger still. A bigger buffer breaks that loop. The video is also
+// marked as such, so a Wi-Fi router that sorts traffic by class sends it ahead of bulk data.
+void tune_stream_socket(Session *session)
+{
+	chiaki_socket_t sock = session->session.stream_connection.takion.sock;
+	if(CHIAKI_SOCKET_IS_INVALID(sock))
+		return;
+	int size = 1 << 20;
+	if(setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size)) != 0)
+		CHIAKI_LOGW(&session->log, "Could not enlarge the stream's receive buffer");
+	int granted = 0;
+	socklen_t length = sizeof(granted);
+	if(getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &granted, &length) == 0)
+		CHIAKI_LOGI(&session->log, "Stream receive buffer: %d bytes", granted);
+	int tos = 34 << 2; // AF41, interactive video
+	setsockopt(sock, IPPROTO_IP, IP_TOS, &tos, sizeof(tos));
+}
+
 void session_event_cb(ChiakiEvent *event, void *user)
 {
 	auto *session = static_cast<Session *>(user);
@@ -291,6 +363,7 @@ void session_event_cb(ChiakiEvent *event, void *user)
 	switch(event->type)
 	{
 		case CHIAKI_EVENT_CONNECTED:
+			tune_stream_socket(session);
 			env->CallVoidMethod(session->listener, session->on_connected);
 			break;
 		case CHIAKI_EVENT_LOGIN_PIN_REQUEST:
@@ -312,13 +385,48 @@ void session_event_cb(ChiakiEvent *event, void *user)
 					static_cast<jint>(event->rumble.left), static_cast<jint>(event->rumble.right));
 			break;
 		case CHIAKI_EVENT_TRIGGER_EFFECTS:
-			// Adaptive triggers need raw access to the controller, which Android does not give over Bluetooth.
-			if(!session->trigger_effects_logged)
+		{
+			// In the order the controller wants them: right trigger first, a mode and ten parameters each.
+			jbyte effects[22];
+			effects[0] = static_cast<jbyte>(event->trigger_effects.type_right);
+			memcpy(effects + 1, event->trigger_effects.right, 10);
+			effects[11] = static_cast<jbyte>(event->trigger_effects.type_left);
+			memcpy(effects + 12, event->trigger_effects.left, 10);
+			jbyteArray array = env->NewByteArray(22);
+			if(array)
 			{
-				session->trigger_effects_logged = true;
-				CHIAKI_LOGI(&session->log, "Console sent adaptive trigger effects (not applied)");
+				env->SetByteArrayRegion(array, 0, 22, effects);
+				env->CallVoidMethod(session->listener, session->on_trigger_effects, array);
+				env->DeleteLocalRef(array);
 			}
 			break;
+		}
+		case CHIAKI_EVENT_LED_COLOR:
+			env->CallVoidMethod(session->listener, session->on_pad_light, static_cast<jint>(0),
+					static_cast<jint>((event->led_state[0] << 16) | (event->led_state[1] << 8) | event->led_state[2]));
+			break;
+		case CHIAKI_EVENT_PLAYER_INDEX:
+			env->CallVoidMethod(session->listener, session->on_pad_light, static_cast<jint>(1),
+					static_cast<jint>(event->player_index & 0x0F));
+			break;
+		case CHIAKI_EVENT_HAPTIC_INTENSITY:
+			env->CallVoidMethod(session->listener, session->on_pad_intensity, static_cast<jint>(0),
+					static_cast<jint>(event->intensity));
+			break;
+		case CHIAKI_EVENT_TRIGGER_INTENSITY:
+			env->CallVoidMethod(session->listener, session->on_pad_intensity, static_cast<jint>(1),
+					static_cast<jint>(event->intensity));
+			break;
+		case CHIAKI_EVENT_MOTION_RESET:
+		{
+			// The game asks for "level" to mean however the controller is being held right now.
+			std::lock_guard<std::mutex> lock(session->controller_mutex);
+			chiaki_accel_new_zero_set_active(&session->accel_zero, session->accel_last[0], session->accel_last[1],
+					session->accel_last[2], false);
+			chiaki_orientation_tracker_init(&session->orientation);
+			env->CallVoidMethod(session->listener, session->on_motion_reset);
+			break;
+		}
 		default:
 			break;
 	}
@@ -476,22 +584,19 @@ JNIEXPORT void JNICALL NATIVE(registFree)(JNIEnv *env, jclass, jlong ptr)
 	delete regist;
 }
 
+JNIEXPORT void JNICALL NATIVE(setLogDirectory)(JNIEnv *env, jclass, jstring path)
+{
+	g_log_directory = to_std_string(env, path);
+}
+
 // --- Session ---
 
-JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host, jbyteArray regist_key, jbyteArray morning,
-		jint resolution_preset, jint fps, jint bitrate_kbps, jint codec, jobject listener)
+// Everything a session needs except the library's own part: decoders, log, listener, video settings.
+static Session *new_session(JNIEnv *env, jint resolution_preset, jint fps, jint bitrate_kbps, jint codec, jobject listener)
 {
-	std::string host_str = to_std_string(env, host);
-
-	ChiakiConnectInfo info = {};
+	auto *session = new Session();
+	ChiakiConnectInfo &info = session->info;
 	info.ps5 = true;
-	info.host = host_str.c_str(); // copied by chiaki_session_init
-	if(!copy_exact(env, regist_key, info.regist_key, sizeof(info.regist_key))
-		|| !copy_exact(env, morning, info.morning, sizeof(info.morning)))
-	{
-		CHIAKI_LOGE(&g_log, "Session: registration keys have the wrong length");
-		return 0;
-	}
 	chiaki_connect_video_profile_preset(&info.video_profile,
 			static_cast<ChiakiVideoResolutionPreset>(resolution_preset),
 			static_cast<ChiakiVideoFPSPreset>(fps));
@@ -500,43 +605,39 @@ JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host,
 	info.video_profile.codec = static_cast<ChiakiCodec>(codec);
 	info.video_profile_auto_downgrade = true;
 	info.enable_idr_on_fec_failure = true;
+	// Left at zero, the loss reported to the console is always "none" and it never eases off.
+	info.packet_loss_max = 0.05;
 	// As a DualSense the console sends haptics, which PS5 games use instead of the old rumble commands.
 	info.enable_dualsense = true;
 
-	auto *session = new Session();
-	android_chiaki_file_log_init(&session->log, CHIAKI_LOG_ALL & ~CHIAKI_LOG_VERBOSE, nullptr);
+	chiaki_controller_state_set_idle(&session->controller);
+	chiaki_orientation_tracker_init(&session->orientation);
+	chiaki_accel_new_zero_set_inactive(&session->accel_zero, false);
+	// Kept on the headset for an error report the player may choose to send; each session replaces it.
+	std::string log_file = g_log_directory.empty() ? "" : g_log_directory + "/session.log";
+	android_chiaki_file_log_init(&session->log, CHIAKI_LOG_ALL & ~(CHIAKI_LOG_VERBOSE | CHIAKI_LOG_DEBUG),
+			log_file.empty() ? nullptr : log_file.c_str());
 
 	ChiakiErrorCode err = android_chiaki_video_decoder_init(&session->video, &session->log,
 			static_cast<int32_t>(info.video_profile.width), static_cast<int32_t>(info.video_profile.height),
 			info.video_profile.codec);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
+		android_chiaki_file_log_fini(&session->log);
 		delete session;
-		return 0;
+		return nullptr;
 	}
-
 	err = android_chiaki_audio_decoder_init(&session->audio, &session->log);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		android_chiaki_video_decoder_fini(&session->video);
+		android_chiaki_file_log_fini(&session->log);
 		delete session;
-		return 0;
+		return nullptr;
 	}
-
 	session->audio_output = android_chiaki_audio_output_new(&session->log);
 	android_chiaki_audio_decoder_set_cb(&session->audio, android_chiaki_audio_output_settings,
 			android_chiaki_audio_output_frame, session->audio_output);
-
-	err = chiaki_session_init(&session->session, &info, &session->log);
-	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		CHIAKI_LOGE(&g_log, "Session failed to init: %s", chiaki_error_string(err));
-		android_chiaki_video_decoder_fini(&session->video);
-		android_chiaki_audio_decoder_fini(&session->audio);
-		android_chiaki_audio_output_free(session->audio_output);
-		delete session;
-		return 0;
-	}
 
 	session->listener = env->NewGlobalRef(listener);
 	jclass listener_class = env->GetObjectClass(listener);
@@ -544,7 +645,35 @@ JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host,
 	session->on_login_pin_request = env->GetMethodID(listener_class, "onLoginPinRequest", "(Z)V");
 	session->on_quit = env->GetMethodID(listener_class, "onQuit", "(IZLjava/lang/String;Ljava/lang/String;)V");
 	session->on_rumble = env->GetMethodID(listener_class, "onRumble", "(II)V");
+	session->on_trigger_effects = env->GetMethodID(listener_class, "onTriggerEffects", "([B)V");
+	session->on_pad_light = env->GetMethodID(listener_class, "onPadLight", "(II)V");
+	session->on_pad_intensity = env->GetMethodID(listener_class, "onPadIntensity", "(II)V");
+	session->on_motion_reset = env->GetMethodID(listener_class, "onMotionReset", "()V");
+	session->on_haptics = env->GetMethodID(listener_class, "onHaptics", "([B)V");
+	return session;
+}
 
+// Frees what new_session made. The library's session, if any, must be gone already.
+static void delete_session(JNIEnv *env, Session *session)
+{
+	android_chiaki_video_decoder_fini(&session->video);
+	android_chiaki_audio_decoder_fini(&session->audio);
+	android_chiaki_audio_output_free(session->audio_output);
+	android_chiaki_file_log_fini(&session->log);
+	env->DeleteGlobalRef(session->listener);
+	delete session;
+}
+
+// Creates the library's session from session->info and wires it to the decoders and the listener.
+static ChiakiErrorCode init_library_session(Session *session)
+{
+	session->info.host = session->host.c_str(); // copied by chiaki_session_init
+	ChiakiErrorCode err = chiaki_session_init(&session->session, &session->info, &session->log);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		CHIAKI_LOGE(&g_log, "Session failed to init: %s", chiaki_error_string(err));
+		return err;
+	}
 	chiaki_session_set_event_cb(&session->session, session_event_cb, session);
 	chiaki_session_set_video_sample_cb(&session->session, count_video_sample, session);
 
@@ -556,20 +685,178 @@ JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host,
 	haptics_sink.user = session;
 	haptics_sink.frame_cb = haptics_frame_cb;
 	chiaki_session_set_haptics_sink(&session->session, &haptics_sink);
+	session->ready.store(true);
+	return CHIAKI_ERR_SUCCESS;
+}
 
+JNIEXPORT jlong JNICALL NATIVE(sessionCreate)(JNIEnv *env, jclass, jstring host, jbyteArray regist_key, jbyteArray morning,
+		jint resolution_preset, jint fps, jint bitrate_kbps, jint codec, jobject listener)
+{
+	Session *session = new_session(env, resolution_preset, fps, bitrate_kbps, codec, listener);
+	if(!session)
+		return 0;
+	session->host = to_std_string(env, host);
+	if(!copy_exact(env, regist_key, session->info.regist_key, sizeof(session->info.regist_key))
+		|| !copy_exact(env, morning, session->info.morning, sizeof(session->info.morning)))
+	{
+		CHIAKI_LOGE(&g_log, "Session: registration keys have the wrong length");
+		delete_session(env, session);
+		return 0;
+	}
+	if(init_library_session(session) != CHIAKI_ERR_SUCCESS)
+	{
+		delete_session(env, session);
+		return 0;
+	}
 	return reinterpret_cast<jlong>(session);
+}
+
+// --- Consoles reached through PSN, from outside the home network ---
+
+// {"ok"} followed by one "duid in hex \t name \t 1 if Remote Play is enabled" per console of the
+// account, or {"error", reason}. Blocks while it asks Sony's servers.
+JNIEXPORT jobjectArray JNICALL NATIVE(psnListDevices)(JNIEnv *env, jclass, jstring token)
+{
+	std::string token_str = to_std_string(env, token);
+	ChiakiHolepunchDeviceInfo *devices = nullptr;
+	size_t count = 0;
+	ChiakiErrorCode err = chiaki_holepunch_list_devices(token_str.c_str(), CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS5, &devices, &count, &g_log);
+
+	jclass string_class = env->FindClass("java/lang/String");
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		jobjectArray result = env->NewObjectArray(2, string_class, nullptr);
+		env->SetObjectArrayElement(result, 0, utf8_string(env, "error"));
+		env->SetObjectArrayElement(result, 1, utf8_string(env, chiaki_error_string(err)));
+		return result;
+	}
+	jobjectArray result = env->NewObjectArray(static_cast<jsize>(count + 1), string_class, nullptr);
+	env->SetObjectArrayElement(result, 0, utf8_string(env, "ok"));
+	for(size_t i = 0; i < count; i++)
+	{
+		std::string line;
+		static const char *digits = "0123456789abcdef";
+		for(uint8_t byte : devices[i].device_uid)
+		{
+			line += digits[byte >> 4];
+			line += digits[byte & 0x0f];
+		}
+		line += '\t';
+		line.append(devices[i].device_name, strnlen(devices[i].device_name, sizeof(devices[i].device_name)));
+		line += devices[i].remoteplay_enabled ? "\t1" : "\t0";
+		jstring text = utf8_string(env, line.c_str());
+		env->SetObjectArrayElement(result, static_cast<jsize>(i + 1), text);
+		env->DeleteLocalRef(text);
+	}
+	if(devices)
+		chiaki_holepunch_free_device_list(&devices);
+	return result;
+}
+
+// A session for a console known only by its id on the account. Nothing is contacted yet.
+JNIEXPORT jlong JNICALL NATIVE(psnSessionCreate)(JNIEnv *env, jclass, jstring console_duid, jstring token,
+		jbyteArray account_id, jint resolution_preset, jint fps, jint bitrate_kbps, jint codec, jobject listener)
+{
+	std::string duid = to_std_string(env, console_duid);
+	if(duid.size() != 64)
+		return 0;
+	Session *session = new_session(env, resolution_preset, fps, bitrate_kbps, codec, listener);
+	if(!session)
+		return 0;
+	for(size_t i = 0; i < 32; i++)
+		session->console_duid[i] = static_cast<uint8_t>(strtoul(duid.substr(i * 2, 2).c_str(), nullptr, 16));
+	session->psn_token = to_std_string(env, token);
+	if(!copy_exact(env, account_id, session->info.psn_account_id, sizeof(session->info.psn_account_id)))
+	{
+		delete_session(env, session);
+		return 0;
+	}
+	return reinterpret_cast<jlong>(session);
+}
+
+// Opens the way to the console through both routers and creates the library's session on top of it.
+// Blocks, often for many seconds. Returns "" when it worked, or what failed.
+JNIEXPORT jstring JNICALL NATIVE(psnConnect)(JNIEnv *env, jclass, jlong ptr)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(!session || session->ready.load())
+		return utf8_string(env, "no session");
+
+	ChiakiHolepunchSession holepunch = chiaki_holepunch_session_init(session->psn_token.c_str(), &session->log);
+	if(!holepunch)
+		return utf8_string(env, "could not start");
+	{
+		std::lock_guard<std::mutex> lock(session->psn_mutex);
+		if(session->psn_cancelled)
+		{
+			chiaki_holepunch_session_fini(holepunch);
+			return utf8_string(env, "cancelled");
+		}
+		session->holepunch = holepunch;
+	}
+
+	const char *step = "router discovery";
+	// A router that will not open a port on request is common, and not a reason to stop.
+	chiaki_holepunch_upnp_discover(holepunch);
+	step = "session with PSN";
+	ChiakiErrorCode err = chiaki_holepunch_session_create(holepunch);
+	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		step = "offer";
+		err = holepunch_session_create_offer(holepunch);
+	}
+	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		step = "console did not answer";
+		err = chiaki_holepunch_session_start(holepunch, session->console_duid, CHIAKI_HOLEPUNCH_CONSOLE_TYPE_PS5);
+	}
+	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		step = "no direct route between the two networks";
+		err = chiaki_holepunch_session_punch_hole(holepunch, CHIAKI_HOLEPUNCH_PORT_TYPE_CTRL);
+	}
+
+	std::lock_guard<std::mutex> lock(session->psn_mutex);
+	if(err == CHIAKI_ERR_SUCCESS && !session->psn_cancelled)
+	{
+		session->info.holepunch_session = holepunch;
+		err = init_library_session(session);
+		step = "session";
+		if(err == CHIAKI_ERR_SUCCESS)
+		{
+			session->holepunch = nullptr; // the library's session frees it from here on
+			return utf8_string(env, "");
+		}
+	}
+	session->holepunch = nullptr;
+	chiaki_holepunch_session_fini(holepunch);
+	std::string reason = session->psn_cancelled ? "cancelled" : std::string(step) + " (" + chiaki_error_string(err) + ")";
+	CHIAKI_LOGE(&session->log, "PSN connection failed: %s", reason.c_str());
+	return utf8_string(env, reason.c_str());
+}
+
+// Makes a psnConnect in progress give up. The caller still waits for it to return before freeing.
+JNIEXPORT void JNICALL NATIVE(psnCancel)(JNIEnv *, jclass, jlong ptr)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(!session)
+		return;
+	std::lock_guard<std::mutex> lock(session->psn_mutex);
+	session->psn_cancelled = true;
+	if(session->holepunch)
+		chiaki_holepunch_main_thread_cancel(session->holepunch, true);
 }
 
 JNIEXPORT jboolean JNICALL NATIVE(sessionStart)(JNIEnv *, jclass, jlong ptr)
 {
 	auto *session = reinterpret_cast<Session *>(ptr);
-	return session && chiaki_session_start(&session->session) == CHIAKI_ERR_SUCCESS;
+	return session && session->ready.load() && chiaki_session_start(&session->session) == CHIAKI_ERR_SUCCESS;
 }
 
 JNIEXPORT void JNICALL NATIVE(sessionStop)(JNIEnv *, jclass, jlong ptr)
 {
 	auto *session = reinterpret_cast<Session *>(ptr);
-	if(session)
+	if(session && session->ready.load())
 		chiaki_session_stop(&session->session);
 }
 
@@ -579,15 +866,13 @@ JNIEXPORT void JNICALL NATIVE(sessionFree)(JNIEnv *env, jclass, jlong ptr)
 	auto *session = reinterpret_cast<Session *>(ptr);
 	if(!session)
 		return;
-	chiaki_session_stop(&session->session);
-	chiaki_session_join(&session->session);
-	chiaki_session_fini(&session->session);
-	android_chiaki_video_decoder_fini(&session->video);
-	android_chiaki_audio_decoder_fini(&session->audio);
-	android_chiaki_audio_output_free(session->audio_output);
-	android_chiaki_file_log_fini(&session->log);
-	env->DeleteGlobalRef(session->listener);
-	delete session;
+	if(session->ready.load())
+	{
+		chiaki_session_stop(&session->session);
+		chiaki_session_join(&session->session);
+		chiaki_session_fini(&session->session);
+	}
+	delete_session(env, session);
 }
 
 JNIEXPORT void JNICALL NATIVE(sessionSetSurface)(JNIEnv *env, jclass, jlong ptr, jobject surface)
@@ -600,7 +885,7 @@ JNIEXPORT void JNICALL NATIVE(sessionSetSurface)(JNIEnv *env, jclass, jlong ptr,
 JNIEXPORT void JNICALL NATIVE(sessionSetLoginPin)(JNIEnv *env, jclass, jlong ptr, jstring pin)
 {
 	auto *session = reinterpret_cast<Session *>(ptr);
-	if(!session)
+	if(!session || !session->ready.load())
 		return;
 	std::string pin_str = to_std_string(env, pin);
 	chiaki_session_set_login_pin(&session->session, reinterpret_cast<const uint8_t *>(pin_str.data()), pin_str.size());
@@ -612,7 +897,7 @@ JNIEXPORT jdoubleArray JNICALL NATIVE(sessionStats)(JNIEnv *env, jclass, jlong p
 {
 	auto *session = reinterpret_cast<Session *>(ptr);
 	jdoubleArray result = env->NewDoubleArray(7);
-	if(!session || !result)
+	if(!session || !result || !session->ready.load())
 		return result;
 	const jdouble values[7] = {
 		session->session.stream_connection.measured_bitrate,
@@ -633,7 +918,7 @@ JNIEXPORT void JNICALL NATIVE(sessionSetController)(JNIEnv *env, jclass, jlong p
 		jint left_x, jint left_y, jint right_x, jint right_y, jintArray touches, jfloatArray motion)
 {
 	auto *session = reinterpret_cast<Session *>(ptr);
-	if(!session)
+	if(!session || !session->ready.load())
 		return;
 
 	ChiakiControllerState state;
@@ -658,23 +943,58 @@ JNIEXPORT void JNICALL NATIVE(sessionSetController)(JNIEnv *env, jclass, jlong p
 		}
 	}
 
-	if(motion && env->GetArrayLength(motion) == 10)
-	{
-		jfloat values[10];
-		env->GetFloatArrayRegion(motion, 0, 10, values);
-		state.gyro_x = values[0];
-		state.gyro_y = values[1];
-		state.gyro_z = values[2];
-		state.accel_x = values[3];
-		state.accel_y = values[4];
-		state.accel_z = values[5];
-		state.orient_x = values[6];
-		state.orient_y = values[7];
-		state.orient_z = values[8];
-		state.orient_w = values[9];
-	}
+	(void)motion;
+	std::lock_guard<std::mutex> lock(session->controller_mutex);
+	session->controller = state;
+	if(session->motion_active)
+		chiaki_orientation_tracker_apply_to_controller_state(&session->orientation, &session->controller);
+	chiaki_session_set_controller_state(&session->session, &session->controller);
+}
 
-	chiaki_session_set_controller_state(&session->session, &state);
+// One reading of the controller's own gyroscope (rad/s) and accelerometer (g), with its time in
+// microseconds. The console wants the orientation too, which is worked out here from the two.
+JNIEXPORT void JNICALL NATIVE(sessionSetMotion)(JNIEnv *, jclass, jlong ptr, jfloat gx, jfloat gy, jfloat gz,
+		jfloat ax, jfloat ay, jfloat az, jlong time_us, jboolean send)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(!session || !session->ready.load())
+		return;
+	std::lock_guard<std::mutex> lock(session->controller_mutex);
+	session->accel_last[0] = ax;
+	session->accel_last[1] = ay;
+	session->accel_last[2] = az;
+	session->motion_active = true;
+	chiaki_orientation_tracker_update(&session->orientation, gx, gy, gz, ax, ay, az, &session->accel_zero, false,
+			static_cast<uint32_t>(time_us));
+	if(!send)
+		return;
+	chiaki_orientation_tracker_apply_to_controller_state(&session->orientation, &session->controller);
+	chiaki_session_set_controller_state(&session->session, &session->controller);
+}
+
+// Stops sending motion, for when the controller with the sensors goes away.
+JNIEXPORT void JNICALL NATIVE(sessionClearMotion)(JNIEnv *, jclass, jlong ptr)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(!session || !session->ready.load())
+		return;
+	std::lock_guard<std::mutex> lock(session->controller_mutex);
+	session->motion_active = false;
+	chiaki_orientation_tracker_init(&session->orientation);
+	session->controller.gyro_x = session->controller.gyro_y = session->controller.gyro_z = 0.0f;
+	session->controller.accel_x = session->controller.accel_z = 0.0f;
+	session->controller.accel_y = 1.0f;
+	session->controller.orient_x = session->controller.orient_y = session->controller.orient_z = 0.0f;
+	session->controller.orient_w = 1.0f;
+	chiaki_session_set_controller_state(&session->session, &session->controller);
+}
+
+// Whether the haptics waveform goes to the app as it is (true) or is reduced to rumble strengths.
+JNIEXPORT void JNICALL NATIVE(sessionForwardHaptics)(JNIEnv *, jclass, jlong ptr, jboolean forward)
+{
+	auto *session = reinterpret_cast<Session *>(ptr);
+	if(session)
+		session->forward_haptics.store(forward);
 }
 
 } // extern "C"

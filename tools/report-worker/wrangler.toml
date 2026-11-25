@@ -1,0 +1,11 @@
+name = "farsofa-reports"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# The address the app posts to (Report.ENDPOINT).
+routes = [{ pattern = "reports.allbele.com", custom_domain = true }]
+
+# The namespace FARSOFA_REPORTS. Its id is not a credential.
+[[kv_namespaces]]
+binding = "REPORTS"
+id = "2ffefe0a23e84429a56c1041391d05e9"

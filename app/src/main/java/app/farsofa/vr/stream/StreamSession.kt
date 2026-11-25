@@ -17,9 +17,16 @@ import android.view.MotionEvent
 import android.view.Surface
 import app.farsofa.vr.console.RegisteredConsole
 import app.farsofa.vr.core.Diagnostics
+import app.farsofa.vr.R
 import app.farsofa.vr.core.Native
+import app.farsofa.vr.psn.CaBundle
+import app.farsofa.vr.input.DualSenseLink
 import app.farsofa.vr.input.GamepadInput
+import app.farsofa.vr.input.PadMotion
+import app.farsofa.vr.input.PadPrefs
 import app.farsofa.vr.input.PadState
+import app.farsofa.vr.input.PadTouch
+import android.os.SystemClock
 import java.util.concurrent.Executors
 import kotlin.math.abs
 
@@ -47,7 +54,16 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         fun onMenuPad(buttons: Int)
     }
 
-    private var ptr = 0L
+    @Volatile private var ptr = 0L
+
+    /** True for a console reached through PSN rather than found on this network. */
+    var remote = false
+        private set
+    private var remoteThread: Thread? = null
+
+    /** The library's reason for the last end of the connection; 4 is "Remote Play already in use". */
+    var lastQuitReason = 0
+        private set
     private var started = false
     private val handler = Handler(Looper.getMainLooper())
     private val teardown = Executors.newSingleThreadExecutor()
@@ -55,8 +71,71 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "farsofa.stream")
         .apply { setReferenceCounted(false) }
 
-    private val gamepad = GamepadInput { publish() }
+    private val gamepad = GamepadInput(app.farsofa.vr.input.PadMappingStore(activity)) { publish() }
     private val touch = PadState()
+
+    // What a DualSense offers beyond buttons and sticks.
+    private val padPrefs = PadPrefs(activity)
+    private val padLink = DualSenseLink(activity)
+    private val padTouch = PadTouch { publish() }
+    private var lastMotionSent = 0L
+    private val padMotion = PadMotion(
+        activity,
+        onSample = { gx, gy, gz, ax, ay, az, timeUs ->
+            val session = ptr
+            if (session != 0L) {
+                // Every reading feeds the orientation; the console gets one every few milliseconds.
+                val now = SystemClock.uptimeMillis()
+                val send = now - lastMotionSent >= MOTION_SEND_MS && !menuOpen
+                if (send) lastMotionSent = now
+                Native.sessionSetMotion(session, gx, gy, gz, ax, ay, az, timeUs, send)
+            }
+        },
+        onLost = { val session = ptr; if (session != 0L) Native.sessionClearMotion(session) },
+    )
+    private var rumbleSetting = 1
+    private var lastRumble = 0
+    private var lastRumbleTime = 0L
+    private val rumbleWatchdog = Runnable { lastRumble = 0; stopRumble() }
+
+    /** The options a player can change mid-game, in the order the options pad shows them. */
+    fun options(): BooleanArray =
+        booleanArrayOf(padPrefs.triggers, padPrefs.lights, padPrefs.motion, padPrefs.fineHaptics, padPrefs.smoothMotion, padPrefs.showFrameCount)
+
+    var smoothLevel: Int
+        get() = padPrefs.smoothLevel
+        set(value) { padPrefs.smoothLevel = value }
+    val smoothLastLevel: Int get() = padPrefs.smoothLastLevel
+    val showFrameCount: Boolean get() = padPrefs.showFrameCount
+
+    /** Flips one option (smooth motion steps through its levels) and applies what can be applied at once. */
+    fun toggleOption(index: Int) {
+        when (index) {
+            0 -> padPrefs.triggers = !padPrefs.triggers
+            1 -> padPrefs.lights = !padPrefs.lights
+            2 -> padPrefs.motion = !padPrefs.motion
+            3 -> padPrefs.fineHaptics = !padPrefs.fineHaptics
+            4 -> return // smooth motion has levels and a confirmation; the screen that shows them handles it
+            5 -> padPrefs.showFrameCount = !padPrefs.showFrameCount
+        }
+        Diagnostics.event("option $index toggled")
+        val session = ptr
+        if (session == 0L) return
+        padLink.configure(triggers = padPrefs.triggers, lights = padPrefs.lights, haptics = padPrefs.fineHaptics)
+        handler.removeCallbacks(padTick)
+        handler.post(padTick)
+        if (padPrefs.motion) {
+            padMotion.start()
+        } else {
+            padMotion.stop()
+            padTouch.release()
+            Native.sessionClearMotion(session)
+            publish()
+        }
+    }
+
+    /** Whether the controller's touchpad fingers are wanted, which needs the window to capture the pointer. */
+    val wantsPointerCapture: Boolean get() = padPrefs.motion
 
     private val leaveRunnable = Runnable { callbacks.onLeaveRequested() }
     private var leaveDelay = 0L
@@ -100,6 +179,16 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     /** When the gamepad was last touched, in SystemClock.uptimeMillis() time. */
     val lastGamepadInputTime: Long get() = gamepad.lastInputTime
 
+    // The haptics go to the controller as sound only while there is a controller that can play them.
+    private val padTick = object : Runnable {
+        override fun run() {
+            val session = ptr
+            if (session == 0L) return
+            Native.sessionForwardHaptics(session, padLink.playsHaptics)
+            handler.postDelayed(this, 1000)
+        }
+    }
+
     private val statsTick = object : Runnable {
         override fun run() {
             val session = ptr
@@ -110,10 +199,22 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     }
 
     init {
+        Diagnostics.init(activity)
+        Native.setLogDirectory(activity.filesDir.absolutePath)
+        val psnDuid = intent.getStringExtra(EXTRA_PSN_DUID)
+        val psnToken = intent.getStringExtra(EXTRA_PSN_TOKEN)
+        val psnAccount = intent.getByteArrayExtra(EXTRA_PSN_ACCOUNT)
+        if (psnDuid != null && psnToken != null && psnAccount != null) {
+            remote = true
+            ptr = Native.psnSessionCreate(
+                psnDuid, psnToken, psnAccount,
+                Native.RESOLUTION_1080P, 60, REMOTE_BITRATE_KBPS, Native.CODEC_HEVC, this,
+            )
+        }
         val host = intent.getStringExtra(EXTRA_HOST)
         val registKey = intent.getByteArrayExtra(EXTRA_REGIST_KEY)
         val rpKey = intent.getByteArrayExtra(EXTRA_RP_KEY)
-        if (host != null && registKey != null && rpKey != null) {
+        if (!remote && host != null && registKey != null && rpKey != null) {
             ptr = Native.sessionCreate(
                 host, registKey, rpKey,
                 Native.RESOLUTION_1080P, 60, LAN_BITRATE_KBPS, Native.CODEC_HEVC, this,
@@ -123,6 +224,11 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
             wifiLock.acquire()
             Diagnostics.sessionStarted(activity)
             handler.postDelayed(statsTick, Diagnostics.STATS_INTERVAL_MS)
+            if (padPrefs.needsLink) {
+                padLink.start(triggers = padPrefs.triggers, lights = padPrefs.lights, haptics = padPrefs.fineHaptics)
+                handler.post(padTick)
+            }
+            if (padPrefs.motion) padMotion.start()
         }
     }
 
@@ -133,7 +239,18 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         Native.sessionSetSurface(session, surface)
         if (!started) {
             started = true
-            return Native.sessionStart(session)
+            if (!remote) return Native.sessionStart(session)
+            // Finding a way through two routers takes a while, and must not hold up the main thread.
+            remoteThread = Thread({
+                CaBundle.ensure(activity)
+                val error = Native.psnConnect(session)
+                Diagnostics.event("remote connect result='$error'")
+                activity.runOnUiThread {
+                    if (!isOpen) return@runOnUiThread
+                    if (error.isEmpty() && Native.sessionStart(session)) return@runOnUiThread
+                    callbacks.onStreamEnded(activity.getString(R.string.quit_remote_failed, error.ifEmpty { "start" }))
+                }
+            }, "farsofa-remote").also { it.start() }
         }
         return true
     }
@@ -145,7 +262,10 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
 
     fun onKeyEvent(event: KeyEvent): Boolean = gamepad.onKeyEvent(event)
 
-    fun onMotionEvent(event: MotionEvent): Boolean = gamepad.onMotionEvent(event)
+    fun onMotionEvent(event: MotionEvent): Boolean = padTouch.onEvent(event) || gamepad.onMotionEvent(event)
+
+    /** Events that arrive while the window has captured the pointer: the fingers on the controller's touchpad. */
+    fun onCapturedPointerEvent(event: MotionEvent): Boolean = padTouch.onEvent(event)
 
     fun setTouchState(buttons: Int, l2: Int, r2: Int, leftX: Int, leftY: Int, rightX: Int, rightY: Int) {
         touch.buttons = buttons and 0xFFFF
@@ -178,7 +298,22 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
             stopRumble()
             wifiLock.release()
         }
+        padMotion.stop()
+        padTouch.release()
+        val connecting = remoteThread
         teardown.execute {
+            if (connecting != null && session != 0L) {
+                Native.psnCancel(session)
+                connecting.join(5_000)
+                // Still inside the library: freeing under it would crash, so the session is left behind.
+                if (connecting.isAlive) {
+                    padLink.stop()
+                    afterFree?.invoke()
+                    return@execute
+                }
+            }
+            // Before the session goes: this lets go of the triggers, which would otherwise stay stiff.
+            padLink.stop()
             if (session != 0L) Native.sessionFree(session)
             afterFree?.invoke()
         }
@@ -199,11 +334,11 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
                 val useTouch = !touchMuted && !touchBusy
                 Native.sessionSetController(
                     session,
-                    padButtons or injected or (if (useTouch) touch.buttons else 0),
+                    padButtons or injected or (if (useTouch) touch.buttons else 0) or (if (padTouch.clicked) PadState.TOUCHPAD else 0),
                     maxOf(pad.l2, if (useTouch) touch.l2 else 0), maxOf(pad.r2, if (useTouch) touch.r2 else 0),
                     stronger(pad.leftX, touch.leftX), stronger(pad.leftY, touch.leftY),
                     stronger(pad.rightX, touch.rightX), stronger(pad.rightY, touch.rightY),
-                    null, null,
+                    if (padPrefs.motion) padTouch.touches else null, null,
                 )
             }
         }
@@ -248,18 +383,87 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
 
     override fun onQuit(reason: Int, isError: Boolean, name: String?, detail: String?) = activity.runOnUiThread {
         Diagnostics.event("stream quit reason=$reason error=$isError name=$name detail=$detail")
-        if (isOpen) callbacks.onStreamEnded(if (isError) detail ?: name ?: reason.toString() else null)
+        lastQuitReason = reason
+        if (isOpen) callbacks.onStreamEnded(if (isError) explain(reason) else null)
     }
 
     override fun onRumble(left: Int, right: Int) = activity.runOnUiThread {
         if (rumblesLogged < 20) {
             rumblesLogged++
-            Diagnostics.event("rumble left=$left right=$right device=${gamepad.lastDeviceId}")
+            Diagnostics.event("rumble left=$left right=$right device=${gamepad.lastDeviceId} link=${padLink.connected}")
         }
-        if (isOpen) rumble(left, right)
+        if (!isOpen) return@runOnUiThread
+        val factor = if (rumbleSetting == 0) 0f else app.farsofa.vr.input.TriggerStrength.factor(rumbleSetting)
+        val scaledLeft = (left * factor).toInt()
+        val scaledRight = (right * factor).toInt()
+        // While the controller plays the haptics as sound, a motor command would switch that off.
+        if (padPrefs.fineHaptics && padLink.connected) return@runOnUiThread
+        if (padLink.connected) {
+            // One writer only: the system's vibration and our own messages to the controller undo each other.
+            padLink.setMotors(scaledLeft, scaledRight)
+            return@runOnUiThread
+        }
+        // The console repeats a rumble while it lasts and says nothing when it ends.
+        handler.removeCallbacks(rumbleWatchdog)
+        if (scaledLeft != 0 || scaledRight != 0) handler.postDelayed(rumbleWatchdog, RUMBLE_TIMEOUT_MS)
+        // A steady rumble is renewed with the same strengths; it is restarted only often enough to
+        // outlast the vibration it started, because restarting it every time is felt as pulsing.
+        val key = (scaledLeft shl 8) or scaledRight
+        val now = SystemClock.uptimeMillis()
+        if (key == lastRumble && now - lastRumbleTime < RUMBLE_MS / 2) return@runOnUiThread
+        lastRumble = key
+        lastRumbleTime = now
+        rumble(scaledLeft, scaledRight)
+    }
+
+    override fun onTriggerEffects(effects: ByteArray) {
+        if (triggersLogged < 5) {
+            triggersLogged++
+            Diagnostics.event("trigger effects right=${effects[0]} left=${effects[11]} link=${padLink.connected}")
+        }
+        padLink.setTriggers(effects)
+    }
+
+    override fun onPadLight(what: Int, value: Int) {
+        Diagnostics.event("pad light what=$what value=${"%x".format(value)}")
+        if (what == 0) padLink.setColour(value) else padLink.setPlayer(value)
+    }
+
+    override fun onPadIntensity(what: Int, value: Int) {
+        Diagnostics.event("pad intensity what=$what value=$value")
+        if (what == 0) {
+            rumbleSetting = value
+            padLink.setRumbleSetting(value)
+        } else {
+            padLink.setTriggerSetting(value)
+        }
+    }
+
+    override fun onMotionReset() = Diagnostics.event("motion reset")
+
+    override fun onHaptics(pcm: ByteArray) = padLink.pushHaptics(pcm)
+
+    /**
+     * Why the console ended the connection, said the way a player can act on. The numbers are the
+     * library's quit reasons; the number is kept at the end for whoever is asked for help.
+     */
+    private fun explain(reason: Int): String {
+        val text = when (reason) {
+            4 -> R.string.quit_in_use
+            3, 9 -> R.string.quit_refused
+            6 -> R.string.quit_version
+            11 -> R.string.quit_disconnected
+            13 -> R.string.quit_remote_link
+            // The console accepted the connection and then went silent. Seen in testing after the
+            // console had been left in rest mode for long; only restarting it brought it back.
+            2, 5, 7, 8, 10 -> R.string.quit_restart
+            else -> R.string.quit_other
+        }
+        return activity.getString(text) + " (" + reason + ")"
     }
 
     private var rumblesLogged = 0
+    private var triggersLogged = 0
 
     private fun rumble(left: Int, right: Int) {
         if (Build.VERSION.SDK_INT < 31) return
@@ -270,7 +474,6 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
             manager.cancel()
             return
         }
-        // The console repeats rumble events while an effect lasts, so each one only needs to bridge the gap.
         val combined = CombinedVibration.startParallel()
         val strengths = if (ids.size >= 2) listOf(left, right) else listOf(maxOf(left, right))
         strengths.forEachIndexed { index, strength ->
@@ -290,7 +493,21 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
         private const val EXTRA_HOST = "host"
         private const val EXTRA_REGIST_KEY = "registKey"
         private const val EXTRA_RP_KEY = "rpKey"
+        private const val EXTRA_PSN_DUID = "psnDuid"
+        private const val EXTRA_PSN_TOKEN = "psnToken"
+        private const val EXTRA_PSN_ACCOUNT = "psnAccount"
+
+        /** Home uploads are far slower than a local network; the console lowers this further if it must. */
+        private const val REMOTE_BITRATE_KBPS = 15000
+
+        fun <T : Activity> remoteIntent(context: Context, target: Class<T>, consoleDuid: String, token: String, accountId: ByteArray): Intent =
+            Intent(context, target)
+                .putExtra(EXTRA_PSN_DUID, consoleDuid)
+                .putExtra(EXTRA_PSN_TOKEN, token)
+                .putExtra(EXTRA_PSN_ACCOUNT, accountId)
         private const val RUMBLE_MS = 2000L
+        private const val RUMBLE_TIMEOUT_MS = 400L
+        private const val MOTION_SEND_MS = 4L
         private const val TAP_MS = 150L
 
         /**

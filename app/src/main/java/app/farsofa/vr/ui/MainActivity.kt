@@ -34,6 +34,20 @@ import app.farsofa.vr.psn.PsnStore
 import app.farsofa.vr.stream.ImmersiveActivity
 import app.farsofa.vr.stream.StreamActivity
 import app.farsofa.vr.stream.StreamSession
+import android.Manifest
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import app.farsofa.vr.input.DualSenseLink
+import app.farsofa.vr.input.PadPrefs
+import app.farsofa.vr.input.PadLearner
+import app.farsofa.vr.input.PadMappingStore
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
+import androidx.compose.runtime.mutableIntStateOf
+import app.farsofa.vr.psn.CaBundle
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -44,6 +58,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        app.farsofa.vr.core.Diagnostics.init(this)
         discovery = Discovery(this)
         consoleStore = ConsoleStore(this)
         psnStore = PsnStore(this)
@@ -108,6 +123,23 @@ class MainActivity : ComponentActivity() {
         var exchangingCode by remember { mutableStateOf(false) }
         var signInError by remember { mutableStateOf<String?>(null) }
         var pairing by remember { mutableStateOf<DiscoveredConsole?>(null) }
+        var remoteConsoles by remember { mutableStateOf<RemoteConsoles>(RemoteConsoles.Loading) }
+        var remoteAttempt by remember { mutableIntStateOf(0) }
+        // The account's consoles are asked for once per sign-in, and again when the player says so.
+        LaunchedEffect(account?.refreshToken, remoteAttempt) {
+            val signedIn = account ?: return@LaunchedEffect
+            remoteConsoles = RemoteConsoles.Loading
+            remoteConsoles = try {
+                val valid = PsnAuth.fresh(signedIn)
+                if (valid !== signedIn) { psnStore.save(valid); account = valid }
+                withContext(Dispatchers.IO) {
+                    CaBundle.ensure(this@MainActivity)
+                    RemoteConsoles.parse(Native.psnListDevices(valid.accessToken))
+                }
+            } catch (e: Exception) {
+                RemoteConsoles.Failed(e.message ?: "sign-in")
+            }
+        }
         var wakingId by remember { mutableStateOf<String?>(null) }
         var notice by remember { mutableStateOf(intent.getStringExtra(EXTRA_NOTICE)) }
 
@@ -194,11 +226,44 @@ class MainActivity : ComponentActivity() {
                         row.registered?.let { consoleStore.remove(it.id) }
                         registered = consoleStore.all()
                     },
+                    remote = remoteConsoles,
+                    onPlayRemote = { console ->
+                        notice = null
+                        scope.launch {
+                            try {
+                                val valid = PsnAuth.fresh(currentAccount)
+                                if (valid !== currentAccount) { psnStore.save(valid); account = valid }
+                                playRemote(console.duid, valid)
+                            } catch (e: Exception) {
+                                remoteConsoles = RemoteConsoles.Failed(e.message ?: "sign-in")
+                            }
+                        }
+                    },
+                    onRefreshRemote = { remoteAttempt++ },
+                    onLearnPad = {
+                        learnDevice = null
+                        learner = PadLearner()
+                    },
                     onSignOut = {
                         psnStore.save(null)
                         account = null
                     },
                 )
+                learner?.let { current ->
+                    PadLearnDialog(
+                        tick = learnTick,
+                        target = current.target,
+                        step = current.progress,
+                        deviceName = learnDevice?.name,
+                        finished = current.finished,
+                        onSkip = { current.skip(); afterLearningEvent(current) },
+                        onReset = {
+                            learnDevice?.let { PadMappingStore(this@MainActivity).clear(PadMappingStore.deviceKey(it.vendorId, it.productId)) }
+                            learner = null
+                        },
+                        onClose = { learner = null },
+                    )
+                }
                 pairing?.let { console ->
                     PairDialog(
                         console = console,
@@ -214,7 +279,79 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // --- Teaching the app an unusual gamepad ---
+
+    private var learner by mutableStateOf<PadLearner?>(null)
+    private var learnTick by mutableIntStateOf(0)
+    private var learnDevice: InputDevice? = null
+
+    private fun learning(device: InputDevice?): PadLearner? {
+        val current = learner ?: return null
+        if (device == null || !(device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK))) return null
+        // The first gamepad to answer is the one being taught; another one joining in would confuse it.
+        if (learnDevice == null) learnDevice = device
+        return if (learnDevice?.id == device.id) current else null
+    }
+
+    private fun afterLearningEvent(current: PadLearner) {
+        learnTick++
+        val device = learnDevice
+        if (current.finished && device != null) {
+            PadMappingStore(this).save(PadMappingStore.deviceKey(device.vendorId, device.productId), current.result)
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val current = learning(event.device) ?: return super.dispatchKeyEvent(event)
+        if (event.repeatCount == 0 && (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP)) {
+            current.onKey(event.keyCode, event.action == KeyEvent.ACTION_DOWN)
+            afterLearningEvent(current)
+        }
+        return true
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        val device = event.device
+        val current = (if (event.isFromSource(InputDevice.SOURCE_JOYSTICK)) learning(device) else null)
+            ?: return super.dispatchGenericMotionEvent(event)
+        if (event.action == MotionEvent.ACTION_MOVE && device != null) {
+            val values = device.motionRanges.filter { it.isFromSource(InputDevice.SOURCE_JOYSTICK) }
+                .associate { it.axis to event.getAxisValue(it.axis) }
+            current.onAxes(values)
+            afterLearningEvent(current)
+        }
+        return true
+    }
+
+    // Talking back to a DualSense needs the Bluetooth permission. It is asked for once, here in the
+    // panel, because a system dialog on top of the immersive screen is worse; the game starts either way.
+    private var afterPermission: (() -> Unit)? = null
+    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        afterPermission?.invoke()
+        afterPermission = null
+    }
+
+    private fun playRemote(consoleDuid: String, account: PsnAccount) {
+        val target = if (packageManager.hasSystemFeature(FEATURE_STANDALONE_VR)) ImmersiveActivity::class.java else StreamActivity::class.java
+        val intent = StreamSession.remoteIntent(this, target, consoleDuid, account.accessToken, account.accountId)
+        if (target == ImmersiveActivity::class.java) {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            finishAndRemoveTask()
+        } else {
+            startActivity(intent)
+        }
+    }
+
     private fun play(host: String, console: RegisteredConsole) {
+        val asked = getPreferences(MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 31 && PadPrefs(this).needsLink && !DualSenseLink.available(this)
+            && !asked.getBoolean("bluetoothAsked", false)
+        ) {
+            asked.edit().putBoolean("bluetoothAsked", true).apply()
+            afterPermission = { play(host, console) }
+            bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            return
+        }
         if (console.lastHost != host) {
             consoleStore.save(RegisteredConsole(console.id, console.nickname, console.registKey, console.rpKey, host))
         }

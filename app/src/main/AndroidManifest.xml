@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- To send a DualSense its trigger effects, lights and haptics. No scanning, so no location prompt. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
     <uses-permission android:name="com.oculus.permission.BOUNDARY_VISIBILITY" />
     <uses-feature android:name="oculus.software.handtracking" android:required="false" />

@@ -51,8 +51,15 @@ object XrNative {
 
     @JvmStatic external fun start(
         activity: Activity, videoWidth: Int, videoHeight: Int,
-        barWidth: Int, barHeight: Int, overlayWidth: Int, overlayHeight: Int, listener: Listener,
+        barWidth: Int, barHeight: Int, overlayWidth: Int, overlayHeight: Int,
+        smooth: Boolean, listener: Listener,
     ): Long
+
+    /** How eagerly frames are made up, 1 to 3. Applies at once. */
+    @JvmStatic external fun setSmoothLevel(ptr: Long, level: Int)
+
+    /** Real and made-up pictures shown in the last second, or -1 and -1 when smooth motion is off. */
+    @JvmStatic external fun smoothStats(ptr: Long): IntArray
 
     /** Places every layer. Lengths in metres, angles in radians; see Scene.kt for the conventions. */
     @JvmStatic external fun setScene(

@@ -26,6 +26,8 @@ import app.farsofa.vr.xr.BarItem
 import app.farsofa.vr.xr.ControlBar
 import app.farsofa.vr.xr.Panel
 import app.farsofa.vr.xr.PanelRenderer
+import app.farsofa.vr.xr.OptionsPad
+import app.farsofa.vr.xr.SmoothPad
 import app.farsofa.vr.xr.PinPad
 import app.farsofa.vr.xr.Ray
 import app.farsofa.vr.xr.Scene
@@ -87,9 +89,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     // While the console waits for its login passcode, the pad takes the bar's place.
     private var pinPad: PinPad? = null
+    private var optionsPad: OptionsPad? = null
     private var pinDigits = ""
     private var pinIncorrect = false
-    private val panel: Panel get() = pinPad ?: bar
+    private val panel: Panel get() = pinPad ?: smoothPad ?: optionsPad ?: bar
     private var placement = Scene.placeBar(layout, allowLift = false)
 
     // Gamepad focus and pointer hover both highlight a control; the pointer wins while it is on the bar.
@@ -135,6 +138,9 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             isFocusable = true
             isFocusableInTouchMode = true
             requestFocus()
+            // With the pointer captured, the controller's touchpad reports fingers instead of moving a cursor.
+            setOnCapturedPointerListener { _, event -> ::stream.isInitialized && !leaving && stream.onCapturedPointerEvent(event) }
+            focusView = this
         })
 
         store = ScreenLayoutStore(this)
@@ -164,7 +170,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         }
         xr = XrNative.start(
             this, VIDEO_WIDTH, VIDEO_HEIGHT, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT,
-            PanelRenderer.OVERLAY_PX_WIDTH, PanelRenderer.OVERLAY_PX_HEIGHT, this,
+            PanelRenderer.OVERLAY_PX_WIDTH, PanelRenderer.OVERLAY_PX_HEIGHT,
+            app.farsofa.vr.input.PadPrefs(this).smoothMotion, this,
         )
         pushScene()
     }
@@ -202,6 +209,83 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         }
     }
 
+    // Smooth motion is picked from a list of its own. Between levels nothing is interrupted, so
+    // those apply at once; switching it on or off rebuilds the screen and reconnects, so that
+    // choice has to be pressed twice, with the reason shown in between.
+    private var smoothPad: SmoothPad? = null
+    private var pendingSmooth: Int? = null
+    private val cancelSmoothConfirm = Runnable {
+        pendingSmooth = null
+        drawPanels()
+    }
+
+    private fun chooseSmooth(level: Int) {
+        val current = stream.smoothLevel
+        handler.removeCallbacks(cancelSmoothConfirm)
+        when {
+            level == current -> pendingSmooth = null
+            level > 0 && current > 0 -> {
+                pendingSmooth = null
+                stream.smoothLevel = level
+                XrNative.setSmoothLevel(xr, level)
+            }
+            pendingSmooth == level -> {
+                pendingSmooth = null
+                stream.smoothLevel = level
+                reconnect()
+            }
+            else -> {
+                pendingSmooth = level
+                handler.postDelayed(cancelSmoothConfirm, SMOOTH_CONFIRM_MS)
+            }
+        }
+    }
+
+    /**
+     * Ends this connection and opens it again with the same console, for a change that cannot be made
+     * while the picture is up. The console needs a moment between the two or it answers "already in use".
+     */
+    private fun reconnect(attempt: Int = 0) {
+        if (leaving) return
+        leaving = true
+        intent.putExtra(EXTRA_RECONNECT_ATTEMPT, attempt)
+        Diagnostics.event("reconnecting, attempt $attempt")
+        handler.removeCallbacksAndMessages(null)
+        if (!demo) store.current = layout
+        barSurface = null
+        overlaySurface = null
+        val session = xr
+        xr = 0L
+        stream.release {
+            if (session != 0L) XrNative.stop(session)
+            // The console keeps the old connection for a few seconds after it is told goodbye.
+            Thread.sleep(RECONNECT_WAIT_MS)
+            runOnUiThread { recreate() }
+        }
+    }
+
+    // A line under the screen saying how many pictures a second are real and how many are made up.
+    private var frameCountShown = false
+    private val frameCountTick = object : Runnable {
+        override fun run() {
+            if (leaving || !frameCountShown) return
+            if (mode == Mode.PLAYING) barSurface?.let { surface ->
+                val counts = XrNative.smoothStats(xr)
+                val text = if (counts[0] < 0) getString(R.string.frame_count_off)
+                else getString(R.string.frame_count, counts[0], counts[1], counts[0] + counts[1])
+                renderer.drawHint(surface, text)
+            }
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun updateFrameCount() {
+        handler.removeCallbacks(frameCountTick)
+        frameCountShown = stream.showFrameCount
+        if (frameCountShown) handler.post(frameCountTick)
+        pushScene()
+    }
+
     private fun drawDemoPicture(surface: Surface) {
         try {
             val picture = assets.open("demo.png").use { BitmapFactory.decodeStream(it) } ?: return
@@ -224,7 +308,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         XrNative.setScene(
             session, layout.distance, layout.width, layout.curved, layout.passthrough,
             if (controls) placement.screenLift else 0f, yaw, pitch,
-            mode != Mode.PLAYING && barSurface != null,
+            (mode != Mode.PLAYING || frameCountShown) && barSurface != null,
             placement.distance, placement.elevation, placement.width, placement.height,
             frameVisible && overlaySurface != null, Scene.OVERLAY_MARGIN, barSurface != null, follow,
         )
@@ -238,6 +322,15 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         val pad = pinPad
         if (mode == Mode.CONTROLS && pad != null) barSurface?.let {
             renderer.drawPin(it, pad, pinDigits.length, pinIncorrect, hover ?: focus, held != null || grab == Grab.Item, barCursor)
+        } else if (mode == Mode.CONTROLS && smoothPad != null) barSurface?.let {
+            renderer.drawSmooth(
+                it, smoothPad!!, stream.smoothLevel, pendingSmooth, hover ?: focus, held != null || grab == Grab.Item, barCursor,
+            )
+        } else if (mode == Mode.CONTROLS && optionsPad != null) barSurface?.let {
+            renderer.drawOptions(
+                it, optionsPad!!, stream.options(), stream.smoothLevel,
+                hover ?: focus, held != null || grab == Grab.Item, barCursor,
+            )
         } else if (mode == Mode.CONTROLS) barSurface?.let {
             renderer.drawBar(
                 it, bar, presets, layout, follow, confirmingReset, hover ?: focus, held != null || grab == Grab.Item, barCursor,
@@ -254,7 +347,9 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         val focused = focus?.action
         bar = ControlBar(presets, layout)
         // The save slot turns into a remove slot and back, so the focused control may no longer exist.
-        focus = focused?.let { panel.find(it) ?: if (pinPad == null) bar.items.last { item -> item.row == 0 } else null }
+        focus = focused?.let {
+            panel.find(it) ?: if (pinPad == null && optionsPad == null) bar.items.last { item -> item.row == 0 } else null
+        }
         pushScene()
         drawPanels()
     }
@@ -287,6 +382,9 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private fun closeControls() {
         if (pinPad != null && pinDigits.length < PinPad.LENGTH) return // the console is still waiting
         pinPad = null
+        optionsPad = null
+        smoothPad = null
+        pendingSmooth = null
         Diagnostics.event("controls closed layout=$layout")
         stopHolding()
         mode = Mode.PLAYING
@@ -302,6 +400,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private fun perform(action: BarAction) {
         Diagnostics.event("bar action $action")
         // Any other press cancels a reset that was waiting to be confirmed.
+        if (action !is BarAction.SmoothChoice && pendingSmooth != null) {
+            pendingSmooth = null
+            handler.removeCallbacks(cancelSmoothConfirm)
+        }
         if (action != BarAction.ResetPresets && confirmingReset) {
             confirmingReset = false
             handler.removeCallbacks(cancelReset)
@@ -357,6 +459,36 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
             }
             is BarAction.Press -> stream.tap(action.buttons)
             BarAction.Close -> closeControls()
+            BarAction.OpenOptions -> {
+                optionsPad = OptionsPad()
+                focus = if (focus != null) optionsPad?.items?.first() else null
+                hover = null
+            }
+            BarAction.CloseOptions -> {
+                optionsPad = null
+                focus = if (focus != null) bar.find(BarAction.OpenOptions) else null
+                hover = null
+            }
+            is BarAction.ToggleOption -> when (action.index) {
+                OptionsPad.SMOOTH_MOTION -> {
+                    val pad = SmoothPad()
+                    smoothPad = pad
+                    val now = pad.find(BarAction.SmoothChoice(stream.smoothLevel))
+                    focus = if (focus != null) now else null
+                    hover = null
+                }
+                OptionsPad.FRAME_COUNT -> {
+                    stream.toggleOption(action.index)
+                    updateFrameCount()
+                }
+                else -> stream.toggleOption(action.index)
+            }
+            is BarAction.SmoothChoice -> chooseSmooth(action.level)
+            BarAction.CloseSmooth -> {
+                smoothPad = null
+                focus = if (focus != null) optionsPad?.find(BarAction.ToggleOption(OptionsPad.SMOOTH_MOTION)) else null
+                hover = null
+            }
             BarAction.Leave -> leave(null)
         }
     }
@@ -560,10 +692,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 }
                 return@runOnUiThread
             }
+            // Until the console answers there is nothing to look at, so say what is going on.
             mode = Mode.HINT
-            renderer.drawHint(bar, getString(R.string.immersive_hint))
+            renderer.drawHint(bar, getString(if (stream.remote) R.string.stream_connecting_remote else R.string.stream_connecting))
             pushScene()
-            handler.postDelayed(hideHint, HINT_MS)
         }
 
     override fun onTouchState(buttons: Int, l2: Int, r2: Int, leftX: Int, leftY: Int, rightX: Int, rightY: Int) =
@@ -610,12 +742,28 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
     // --- Stream ---
 
-    override fun onStreamConnected() = Unit
+    override fun onStreamConnected() {
+        intent.removeExtra(EXTRA_RECONNECT_ATTEMPT)
+        XrNative.setSmoothLevel(xr, stream.smoothLevel.coerceAtLeast(1))
+        handler.postDelayed({ updateFrameCount() }, HINT_MS + 500)
+        if (leaving || mode != Mode.HINT) return
+        barSurface?.let { renderer.drawHint(it, getString(R.string.immersive_hint)) }
+        pushScene()
+        handler.postDelayed(hideHint, HINT_MS)
+    }
 
     override fun onLoginPinRequest(incorrect: Boolean) = openPin(incorrect)
 
-    override fun onStreamEnded(error: String?) =
-        leave(error?.let { getString(R.string.stream_ended_error, it) })
+    override fun onStreamEnded(error: String?) {
+        // Coming straight back, the console may still count the connection that was just closed.
+        // That is not a failure to show the player: wait and try again a few times.
+        val attempt = intent.getIntExtra(EXTRA_RECONNECT_ATTEMPT, -1)
+        if (error != null && stream.lastQuitReason == QUIT_IN_USE && attempt in 0 until RECONNECT_TRIES) {
+            reconnect(attempt + 1)
+            return
+        }
+        leave(error)
+    }
 
     override fun onLeaveRequested() = leave(null)
 
@@ -632,7 +780,12 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
 
         if (released and PadState.CROSS != 0) stopHolding()
         when {
-            pressed and PadState.CIRCLE != 0 -> if (pinPad != null) perform(BarAction.Backspace) else closeControls()
+            pressed and PadState.CIRCLE != 0 -> when {
+                pinPad != null -> perform(BarAction.Backspace)
+                smoothPad != null -> perform(BarAction.CloseSmooth)
+                optionsPad != null -> perform(BarAction.CloseOptions)
+                else -> closeControls()
+            }
             pressed and PadState.CROSS != 0 -> focus?.let { startHolding(it.action) }
             pressed and PadState.DPAD_MASK != 0 -> {
                 val from = focus
@@ -651,6 +804,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         Diagnostics.event("window focus=$hasFocus")
+        if (hasFocus && ::stream.isInitialized && stream.wantsPointerCapture) focusView?.requestPointerCapture()
     }
 
     override fun onResume() {
@@ -679,10 +833,16 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         return (!leaving && stream.onMotionEvent(event)) || super.dispatchGenericMotionEvent(event)
     }
 
+    private var focusView: View? = null
     private var rawEventsLogged = 0
     private var rawMotionsLogged = 0
 
     companion object {
+        private const val EXTRA_RECONNECT_ATTEMPT = "reconnectAttempt"
+        private const val RECONNECT_WAIT_MS = 3500L
+        private const val RECONNECT_TRIES = 4
+        private const val QUIT_IN_USE = 4
+        private const val SMOOTH_CONFIRM_MS = 8000L
         /** Test builds only: show the bundled picture instead of connecting to a console. */
         const val EXTRA_DEMO = "demo"
 

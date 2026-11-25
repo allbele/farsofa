@@ -3,35 +3,35 @@
     <string name="app_name" translatable="false">Farsofa</string>
     <string name="cancel">Cancel</string>
 
-    <string name="welcome_body">Play your console on a big screen in your headset. Sign in once and your console shows up on its own.</string>
-    <string name="welcome_sign_in">Sign in to PlayStation Network</string>
-    <string name="sign_in_failed">Sign-in didn\'t complete. Check your connection and try again.</string>
+    <string name="welcome_body">Play the games on your console on a giant screen inside the headset, with the TV off. Sign in once with your account and the app finds the console by itself.</string>
+    <string name="welcome_sign_in">Sign in with your PlayStation account</string>
+    <string name="sign_in_failed">Could not sign in. Check that the headset has internet and try again.</string>
     <string name="sign_out">Sign out</string>
-    <string name="login_title">Sign in to PlayStation Network</string>
+    <string name="login_title">Sign in with your PlayStation account</string>
 
     <string name="consoles_title">Your consoles</string>
-    <string name="consoles_searching">Looking for consoles on this network…</string>
-    <string name="consoles_searching_hint">Turn the console on or leave it in rest mode, on the same Wi-Fi network as this headset.</string>
+    <string name="consoles_searching">Looking for the console on your Wi-Fi…</string>
+    <string name="consoles_searching_hint">The console must be on, or in rest mode (orange light), and on the same Wi-Fi as the headset. First time? Tap \"How to prepare the console\".</string>
     <string name="console_ready">On</string>
-    <string name="console_standby">In rest mode</string>
-    <string name="console_offline">Not on this network</string>
+    <string name="console_standby">In rest mode (orange light)</string>
+    <string name="console_offline">Not found on this Wi-Fi</string>
     <string name="console_waking">Waking up…</string>
-    <string name="console_pair">Pair</string>
+    <string name="console_pair">Link</string>
     <string name="console_play">Play</string>
     <string name="console_wake_and_play">Wake and play</string>
-    <string name="console_forget">Forget</string>
-    <string name="wake_timeout">The console didn\'t wake up. Turn it on and try again.</string>
+    <string name="console_forget">Remove</string>
+    <string name="wake_timeout">The console did not turn on by itself. Turn it on with its button and try again.</string>
 
-    <string name="pair_title">Pair with %1$s</string>
-    <string name="pair_steps">On the console, open Settings › System › Remote Play › Link Device, then type the 8-digit code shown there.</string>
+    <string name="pair_title">Link to %1$s</string>
+    <string name="pair_steps">This is asked only once. On the TV, with the controller of the console, open Settings › System › Remote Play › Link Device. An 8-digit code appears: type it here.</string>
     <string name="pair_code_label">8-digit code</string>
-    <string name="pair_failed">Pairing didn\'t work. Check the code, make sure you\'re signed in to the same account on the console, and try again.</string>
+    <string name="pair_failed">That did not work. Check the digits and make sure the console is on the same PlayStation account you used here. The code changes on every try.</string>
 
     <string name="stream_connecting">Connecting…</string>
-    <string name="stream_exit_hint">Hold L1 + R1 + Options to disconnect</string>
-    <string name="stream_failed_start">Couldn\'t start the connection.</string>
-    <string name="stream_ended_error">The connection ended: %1$s</string>
-    <string name="stream_login_pin_title">Enter the console\'s login passcode</string>
+    <string name="stream_exit_hint">To leave: hold L1 + R1 + Options</string>
+    <string name="stream_failed_start">Could not connect to the console.</string>
+    <string name="stream_ended_error">The connection dropped: %1$s</string>
+    <string name="stream_login_pin_title">Type the 4-digit passcode of your profile on the console</string>
     <string name="stream_login_pin_incorrect">Wrong passcode. Try again</string>
     <string name="immersive_failed">Couldn\'t start the immersive screen.</string>
     <string name="welcome_browser_sign_in">Sign-in page not loading? Use the browser instead</string>
@@ -42,7 +42,7 @@
     <string name="browser_login_address_label">Address of the blank page</string>
     <string name="browser_login_rejected">That isn\'t the address of the final page. It starts with https://remoteplay.dl.playstation.net</string>
     <string name="browser_login_continue">Continue</string>
-    <string name="immersive_hint">PS button or Menu: screen controls  ·  Hold L1 + R1 + Options to disconnect</string>
+    <string name="immersive_hint">Quick tap on the PS button: adjust the screen  ·  To leave: hold L1 + R1 + Options</string>
     <string name="bar_save_preset">+ Save this screen</string>
     <string name="bar_remove_preset">Remove %1$s</string>
     <string name="bar_preset_base">Screen</string>
@@ -62,5 +62,111 @@
     <string name="bar_reset_presets">Restore defaults</string>
     <string name="bar_reset_confirm">Confirm?</string>
     <string name="bar_backspace">Delete</string>
-    <string name="streaming_notice">The picture is streamed from your own console. A fast, stable Wi-Fi connection is required.</string>
+    <string name="streaming_notice">The picture is streamed from your own console. It needs fast, stable Wi-Fi; close to the router works best.</string>
+    <string name="controller_title">Options</string>
+    <string name="controller_intro">The first four are for a DualSense (the PS5 controller) connected to the headset by Bluetooth. They apply the next time you connect to the console.</string>
+    <string name="controller_triggers">Adaptive triggers</string>
+    <string name="controller_triggers_detail">The L2 and R2 triggers stiffen or shake as the game asks, as on the console.</string>
+    <string name="controller_lights">Controller lights</string>
+    <string name="controller_lights_detail">The light on the controller changes colour as it does on the console.</string>
+    <string name="controller_motion">Motion and touchpad</string>
+    <string name="controller_motion_detail">For games that ask you to tilt the controller or swipe on its touchpad.</string>
+    <string name="controller_haptics">Detailed vibration (in testing)</string>
+    <string name="controller_haptics_detail">The richer vibration of PS5 games. Still being tuned: it may lag or feel rough.</string>
+    <string name="controller_done">Done</string>
+    <string name="option_smooth">Smooth motion (in testing)</string>
+    <string name="option_smooth_detail">Makes games that run at 30 frames a second look more fluid. Still being tuned: edges may wobble in fast motion.</string>
+    <string-array name="pad_controls">
+        <item>Cross</item>
+        <item>Circle</item>
+        <item>Square</item>
+        <item>Triangle</item>
+        <item>D-pad left</item>
+        <item>D-pad right</item>
+        <item>D-pad up</item>
+        <item>D-pad down</item>
+        <item>L1</item>
+        <item>R1</item>
+        <item>L3 (press the left stick)</item>
+        <item>R3 (press the right stick)</item>
+        <item>Options</item>
+        <item>Create</item>
+        <item>Touchpad click</item>
+        <item>PS</item>
+        <item>L2</item>
+        <item>R2</item>
+        <item>Left stick: push right</item>
+        <item>Left stick: push down</item>
+        <item>Right stick: push right</item>
+        <item>Right stick: push down</item>
+    </string-array>
+    <string name="pad_learn_open">Set up another gamepad</string>
+    <string name="pad_learn_title">Gamepad buttons</string>
+    <string name="pad_learn_waiting">For a gamepad that is not a PlayStation one, or whose buttons come out swapped. Press any button on it to begin.</string>
+    <string name="pad_learn_prompt">On your gamepad, press:</string>
+    <string name="pad_learn_step">%1$d of %2$d</string>
+    <string name="pad_learn_skip">Skip this one</string>
+    <string name="pad_learn_reset">Back to standard</string>
+    <string name="pad_learn_done">All set. The app will remember this gamepad.</string>
+    <string name="bar_options">App settings</string>
+    <string name="bar_console_mark">CONTROLLER</string>
+    <string name="bar_options_back">Back</string>
+    <string name="bar_options_hint">Choose what to change. Smooth motion opens its own list.</string>
+    <string name="bar_option_triggers">TRIGGERS</string>
+    <string name="bar_option_lights">LIGHTS</string>
+    <string name="bar_option_motion">MOTION</string>
+    <string name="bar_option_haptics">FINE HAPTICS</string>
+    <string name="bar_option_smooth">SMOOTH MOTION</string>
+    <string name="bar_option_on">On</string>
+    <string name="bar_option_off">Off</string>
+    <string name="stream_connecting_remote">Connecting over the internet… this can take up to a minute</string>
+    <string name="consoles_local">On this network (best picture, least delay)</string>
+    <string name="consoles_remote">Over the internet (more delay)</string>
+    <string name="consoles_remote_hint">For playing away from home. The picture is less sharp and the controls answer a little later than at home. The console must be on, or in rest mode with \"Stay Connected to the Internet\" enabled.</string>
+    <string name="consoles_remote_loading">Looking for the consoles on your account…</string>
+    <string name="consoles_remote_empty">No console on your account has Remote Play turned on. Tap \"How to prepare the console\".</string>
+    <string name="consoles_remote_error">Could not check your account right now (%1$s). Check that the headset has internet.</string>
+    <string name="consoles_remote_retry">Try again</string>
+    <string name="consoles_remote_off">Remote Play is off on this console</string>
+    <string name="console_play_remote">Play over the internet</string>
+    <string name="consoles_local_empty">No console found on this network yet.</string>
+    <string name="guide_open">How to prepare the console</string>
+    <string name="guide_title">Before you start, on the console</string>
+    <string name="guide_intro">This is done once, with the console on a TV. After that the TV is not needed.</string>
+    <string name="guide_done">Got it</string>
+    <string-array name="guide_steps">
+        <item>Sign in on the console with the same PlayStation Network account you used here.</item>
+        <item>Open Settings › System › Remote Play and turn on \"Enable Remote Play\".</item>
+        <item>To start it from rest mode: Settings › System › Power Saving › Features Available in Rest Mode, and turn on \"Stay Connected to the Internet\" and \"Enable Turning On PS5 from Network\".</item>
+        <item>On this network: when the console shows up here, tap Link. On the console open Settings › System › Remote Play › Link Device and type the 8-digit code it shows.</item>
+        <item>Away from home there is no code: the console appears under \"Over the internet\" by itself.</item>
+    </string-array>
+    <string name="consoles_local_hint">Use this at home, with the headset on the same Wi-Fi as the console.</string>
+    <string name="quit_restart">The console did not complete the connection. Restart the console (turn it fully off and on again) and try once more.</string>
+    <string name="quit_in_use">The console says Remote Play is already in use by another device. Close the other connection and try again. If there is none, restart the console.</string>
+    <string name="quit_refused">The console refused the connection. Check that Remote Play is on at the console and that it is still linked to this headset.</string>
+    <string name="quit_version">The console asks for a newer version of this app. Update Farsofa.</string>
+    <string name="quit_disconnected">The console ended the connection. This happens when someone starts using the console with the same account.</string>
+    <string name="quit_remote_link">Could not link over the internet. Check that the console is on the same PlayStation account you used here.</string>
+    <string name="quit_other">The connection dropped. If it keeps happening, restart the console and try again.</string>
+    <string name="quit_remote_failed">Could not connect over the internet (%1$s). See \"How to prepare the console\"; if everything is already on, restart the console and try again.</string>
+    <string name="report_open">Something went wrong? Send an error report</string>
+    <string name="report_title">Send an error report</string>
+    <string name="report_body">The app keeps a technical diary on the headset of the last times you played: what worked, where the connection stopped, how good the Wi-Fi was. Sending it helps find and fix the problem.</string>
+    <string name="report_privacy">Not included: your account, your password, the name of the console, addresses on your network. Nothing is sent unless you tap Send.</string>
+    <string name="report_send">Send</string>
+    <string name="report_failed">Could not send it right now. Check that the headset has internet and try again.</string>
+    <string name="report_sent">Report sent. This is its code:</string>
+    <string name="report_sent_hint">If you ask for help at contato@allbele.com, quote this code so we can find your report.</string>
+    <string name="bar_option_count">COUNTER</string>
+    <string name="bar_option_level">Level %1$d</string>
+    <string name="frame_count">%1$d from the game + %2$d made by the app (%3$d a second in all)</string>
+    <string name="frame_count_off">Smooth motion is off: the game shows its own pictures only</string>
+    <string name="bar_smooth_hint">Levels 1 and 2 add no delay. Level 3 is the smoothest, with a slight delay on the controls.</string>
+    <string name="bar_smooth_confirm">This reconnects the game (a few seconds). Press the same choice again to confirm.</string>
+    <string name="bar_smooth_none">NO EFFECT</string>
+    <string name="bar_smooth_light">LIGHT</string>
+    <string name="bar_smooth_medium">STRONG</string>
+    <string name="bar_smooth_strong">SMOOTHEST</string>
+    <string name="bar_smooth_current">IN USE</string>
 </resources>

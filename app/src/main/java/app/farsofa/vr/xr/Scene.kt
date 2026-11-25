@@ -78,7 +78,7 @@ object Scene {
     private const val DEG = (Math.PI / 180.0).toFloat()
     private const val BAR_REST_ELEVATION = -24f * DEG
     private const val BAR_LOWEST_ELEVATION = -50f * DEG
-    private const val BAR_GAP = 1f * DEG
+    private const val BAR_GAP = 4.5f * DEG
     private const val GENTLE_LIFT = 7f * DEG
 
     fun screenHeight(layout: ScreenLayout): Float = layout.width / ASPECT

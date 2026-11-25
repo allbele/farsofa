@@ -10,11 +10,16 @@ import android.os.Build
 import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /**
- * Writes what a test session needs to be understood afterwards to the system log, under one tag.
- * Nothing leaves the headset: the log is read over USB with tools/pull-logs.sh.
+ * Keeps a diary of what the app did, so that a failure can be understood afterwards. It is written
+ * to a file inside the app and, in test builds, to the system log as well. Nothing leaves the
+ * headset unless the player sends an error report (see [Report]); the diary holds no account, no
+ * console name and no network address.
  */
 object Diagnostics {
     private const val TAG = "FarsofaDiag"
@@ -24,17 +29,54 @@ object Diagnostics {
     private var lastLost = 0.0
     private var lastBytes = 0.0
 
-    /** Test builds only; a release build stays quiet. Set when a session starts. */
-    private var enabled = false
+    private const val MAX_BYTES = 256_000L
+    private const val KEEP_BYTES = 128_000
 
+    /** Test builds also write to the system log, which is read over USB. */
+    private var toSystemLog = false
+    private var file: File? = null
+    private var writesSinceCheck = 0
+    private val stamp = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
+
+    fun diaryFile(context: Context): File = File(context.filesDir, "diary.log")
+
+    /** Call once per activity; later calls change nothing. */
+    @Synchronized
+    fun init(context: Context) {
+        if (file != null) return
+        toSystemLog = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        file = diaryFile(context.applicationContext)
+        trim()
+    }
+
+    @Synchronized
     fun event(message: String) {
-        if (enabled) Log.i(TAG, message)
+        if (toSystemLog) Log.i(TAG, message)
+        val target = file ?: return
+        try {
+            target.appendText(stamp.format(Date()) + " " + message + "\n")
+            if (++writesSinceCheck >= 200) trim()
+        } catch (e: Exception) {
+            // a full disk must not take the game down with it
+        }
+    }
+
+    /** Keeps the newer half once the diary has grown past its limit. */
+    private fun trim() {
+        writesSinceCheck = 0
+        val target = file ?: return
+        try {
+            if (target.length() <= MAX_BYTES) return
+            val text = target.readText()
+            target.writeText(text.takeLast(KEEP_BYTES).substringAfter('\n'))
+        } catch (e: Exception) {
+            // keep writing to it as it is
+        }
     }
 
     /** One block describing the headset, the network and every controller Android can see. */
     fun sessionStarted(context: Context) {
-        enabled = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-        if (!enabled) return
+        init(context)
         lastFrames = 0.0
         lastLost = 0.0
         lastBytes = 0.0
@@ -49,7 +91,7 @@ object Diagnostics {
     }
 
     fun streamStats(context: Context, stats: DoubleArray) {
-        if (!enabled || stats.size < 7) return
+        if (stats.size < 7) return
         val seconds = STATS_INTERVAL_MS / 1000.0
         val fps = (stats[3] - lastFrames) / seconds
         val lost = stats[4] - lastLost

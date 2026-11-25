@@ -11,11 +11,3 @@ local.properties
 *.jks
 keystore.properties
 .venv/
-test-logs/
-store/listing.md
-store/screenshots/
-signing/
-store/falta-para-enviar.md
-store/build/
-docs/interno/
-marketing/

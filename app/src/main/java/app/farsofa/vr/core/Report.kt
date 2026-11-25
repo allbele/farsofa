@@ -14,7 +14,7 @@ import java.net.URL
  * identify the player or their network struck out first.
  */
 object Report {
-    /** Where reports are received. See tools/report-worker. */
+    /** Where reports are received. */
     const val ENDPOINT = "https://reports.allbele.com/farsofa"
 
     private const val DIARY_TAIL = 150_000

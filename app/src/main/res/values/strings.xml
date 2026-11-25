@@ -64,7 +64,7 @@
     <string name="bar_backspace">Delete</string>
     <string name="streaming_notice">The picture is streamed from your own console. It needs fast, stable Wi-Fi; close to the router works best.</string>
     <string name="controller_title">Options</string>
-    <string name="controller_intro">The first four are for a DualSense (the PS5 controller) connected to the headset by Bluetooth. They apply from the next game.</string>
+    <string name="controller_intro">The first four are for a DualSense (the PS5 controller) connected to the headset by Bluetooth. They apply the next time you connect to the console.</string>
     <string name="controller_triggers">Adaptive triggers</string>
     <string name="controller_triggers_detail">The L2 and R2 triggers stiffen or shake as the game asks, as on the console.</string>
     <string name="controller_lights">Controller lights</string>
@@ -110,7 +110,7 @@
     <string name="pad_learn_done">All set. The app will remember this gamepad.</string>
     <string name="bar_options">Options</string>
     <string name="bar_options_back">Back</string>
-    <string name="bar_options_hint">Turning smooth motion on or off reconnects the game by itself. Levels change at once.</string>
+    <string name="bar_options_hint">Smooth motion levels change at once. Switching it on or off reconnects the game.</string>
     <string name="bar_option_triggers">TRIGGERS</string>
     <string name="bar_option_lights">LIGHTS</string>
     <string name="bar_option_motion">MOTION</string>
@@ -161,4 +161,6 @@
     <string name="bar_option_level">Level %1$d</string>
     <string name="frame_count">%1$d real + %2$d made up = %3$d pictures a second</string>
     <string name="frame_count_off">Smooth motion is off: the game shows its own pictures only</string>
+    <string name="bar_smooth_confirm_off">Switch smooth motion off? The game will reconnect. Press again to confirm.</string>
+    <string name="bar_smooth_confirm_on">Switch smooth motion on? The game will reconnect. Press again to confirm.</string>
 </resources>

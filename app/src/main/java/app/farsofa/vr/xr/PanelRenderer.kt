@@ -144,13 +144,21 @@ class PanelRenderer(private val context: Context) {
         }
 
     /** The options: a line of explanation, a switch for each, and the way back. [values] says which are on. */
-    fun drawOptions(surface: Surface, pad: OptionsPad, values: BooleanArray, smoothLevel: Int, highlighted: BarItem?, pressed: Boolean, cursor: Pair<Float, Float>?) =
+    fun drawOptions(
+        surface: Surface, pad: OptionsPad, values: BooleanArray, smoothLevel: Int, confirmingSmooth: Boolean,
+        highlighted: BarItem?, pressed: Boolean, cursor: Pair<Float, Float>?,
+    ) =
         draw(surface, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT) { canvas ->
             panel(canvas, 0f, 0f, Scene.BAR_PX_WIDTH.toFloat(), Scene.BAR_PX_HEIGHT.toFloat())
             text.textSize = 32f
-            text.color = MUTED
+            text.color = if (confirmingSmooth) TEXT else MUTED
             text.textAlign = Paint.Align.LEFT
-            canvas.drawText(string(R.string.bar_options_hint), pad.prompt.left + 12f, pad.prompt.centerY + 11f, text)
+            val hint = when {
+                !confirmingSmooth -> R.string.bar_options_hint
+                smoothLevel > 0 -> R.string.bar_smooth_confirm_off
+                else -> R.string.bar_smooth_confirm_on
+            }
+            canvas.drawText(string(hint), pad.prompt.left + 12f, pad.prompt.centerY + 11f, text)
             text.textAlign = Paint.Align.CENTER
 
             val captions = intArrayOf(
@@ -161,8 +169,10 @@ class PanelRenderer(private val context: Context) {
                 val action = item.action
                 val isHighlighted = item == highlighted
                 val isOn = action is BarAction.ToggleOption && values.getOrElse(action.index) { false }
+                val asking = confirmingSmooth && action is BarAction.ToggleOption && action.index == OptionsPad.SMOOTH_MOTION
                 fill.color = when {
                     isHighlighted && pressed -> ACCENT
+                    asking -> DANGER_DIM
                     isOn -> ACCENT_DIM
                     isHighlighted -> CONTROL_HOVER
                     else -> CONTROL
@@ -175,7 +185,8 @@ class PanelRenderer(private val context: Context) {
                     canvas.drawRoundRect(rect, CORNER, CORNER, stroke)
                 }
                 if (action is BarAction.ToggleOption) {
-                    val value = if (action.index == OptionsPad.SMOOTH_MOTION && isOn) context.getString(R.string.bar_option_level, smoothLevel)
+                    val value = if (asking) string(R.string.bar_reset_confirm)
+                    else if (action.index == OptionsPad.SMOOTH_MOTION && isOn) context.getString(R.string.bar_option_level, smoothLevel)
                     else string(if (isOn) R.string.bar_option_on else R.string.bar_option_off)
                     captioned(canvas, item.box, string(captions[action.index]), value)
                 } else {

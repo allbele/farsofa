@@ -36,7 +36,15 @@ class PadPrefs(context: Context) {
     var smoothLevel: Int
         get() = if (prefs.contains(KEY_SMOOTH_LEVEL)) prefs.getInt(KEY_SMOOTH_LEVEL, 0).coerceIn(0, 3)
         else if (prefs.getBoolean(KEY_SMOOTH, false)) 1 else 0
-        set(value) = prefs.edit().putInt(KEY_SMOOTH_LEVEL, value.coerceIn(0, 3)).apply()
+        set(value) {
+            val level = value.coerceIn(0, 3)
+            val edit = prefs.edit().putInt(KEY_SMOOTH_LEVEL, level)
+            if (level > 0) edit.putInt(KEY_SMOOTH_LAST, level)
+            edit.apply()
+        }
+
+    /** The level smooth motion comes back at when it is switched on again. */
+    val smoothLastLevel: Int get() = prefs.getInt(KEY_SMOOTH_LAST, 2).coerceIn(1, 3)
 
     val smoothMotion: Boolean get() = smoothLevel > 0
 
@@ -55,6 +63,7 @@ class PadPrefs(context: Context) {
         const val KEY_FINE_HAPTICS = "fineHaptics"
         const val KEY_SMOOTH = "smoothMotion"
         const val KEY_SMOOTH_LEVEL = "smoothLevel"
+        const val KEY_SMOOTH_LAST = "smoothLastLevel"
         const val KEY_FRAME_COUNT = "frameCount"
     }
 }

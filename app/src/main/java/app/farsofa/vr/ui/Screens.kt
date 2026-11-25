@@ -568,7 +568,7 @@ fun ControllerDialog(onDismiss: () -> Unit, onLearnPad: () -> Unit) {
                 option(R.string.controller_lights, R.string.controller_lights_detail, lights) { lights = it; prefs.lights = it }
                 option(R.string.controller_motion, R.string.controller_motion_detail, motion) { motion = it; prefs.motion = it }
                 option(R.string.controller_haptics, R.string.controller_haptics_detail, fineHaptics) { fineHaptics = it; prefs.fineHaptics = it }
-                option(R.string.option_smooth, R.string.option_smooth_detail, smooth) { smooth = it; prefs.smoothLevel = if (it) 2 else 0 }
+                option(R.string.option_smooth, R.string.option_smooth_detail, smooth) { smooth = it; prefs.smoothLevel = if (it) prefs.smoothLastLevel else 0 }
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.controller_done)) } },

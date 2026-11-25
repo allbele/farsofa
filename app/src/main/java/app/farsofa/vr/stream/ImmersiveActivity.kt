@@ -208,6 +208,44 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         }
     }
 
+    // Switching smooth motion on or off rebuilds the screen and reconnects, so it is asked for twice.
+    // Between levels nothing is interrupted, so those change on a single press.
+    private var confirmingSmooth = false
+    private var smoothAskedAtTop = false
+    private val cancelSmoothConfirm = Runnable {
+        confirmingSmooth = false
+        drawPanels()
+    }
+
+    private fun pressSmooth() {
+        val level = stream.smoothLevel
+        when {
+            confirmingSmooth -> {
+                confirmingSmooth = false
+                handler.removeCallbacks(cancelSmoothConfirm)
+                stream.smoothLevel = if (level > 0) 0 else stream.smoothLastLevel
+                reconnect()
+            }
+            level in 1..2 -> {
+                stream.smoothLevel = level + 1
+                smoothAskedAtTop = false
+                XrNative.setSmoothLevel(xr, level + 1)
+            }
+            // At the top level the next press offers to switch off; if that is let pass, the one after goes round to level 1.
+            level == 3 && smoothAskedAtTop -> {
+                stream.smoothLevel = 1
+                smoothAskedAtTop = false
+                XrNative.setSmoothLevel(xr, 1)
+            }
+            else -> {
+                confirmingSmooth = true
+                smoothAskedAtTop = level == 3
+                handler.removeCallbacks(cancelSmoothConfirm)
+                handler.postDelayed(cancelSmoothConfirm, 6000)
+            }
+        }
+    }
+
     /**
      * Ends this connection and opens it again with the same console, for a change that cannot be made
      * while the picture is up. The console needs a moment between the two or it answers "already in use".
@@ -288,7 +326,10 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         if (mode == Mode.CONTROLS && pad != null) barSurface?.let {
             renderer.drawPin(it, pad, pinDigits.length, pinIncorrect, hover ?: focus, held != null || grab == Grab.Item, barCursor)
         } else if (mode == Mode.CONTROLS && optionsPad != null) barSurface?.let {
-            renderer.drawOptions(it, optionsPad!!, stream.options(), stream.smoothLevel, hover ?: focus, held != null || grab == Grab.Item, barCursor)
+            renderer.drawOptions(
+                it, optionsPad!!, stream.options(), stream.smoothLevel, confirmingSmooth,
+                hover ?: focus, held != null || grab == Grab.Item, barCursor,
+            )
         } else if (mode == Mode.CONTROLS) barSurface?.let {
             renderer.drawBar(
                 it, bar, presets, layout, follow, confirmingReset, hover ?: focus, held != null || grab == Grab.Item, barCursor,
@@ -356,6 +397,11 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     private fun perform(action: BarAction) {
         Diagnostics.event("bar action $action")
         // Any other press cancels a reset that was waiting to be confirmed.
+        val smoothPress = action is BarAction.ToggleOption && action.index == OptionsPad.SMOOTH_MOTION
+        if (!smoothPress && confirmingSmooth) {
+            confirmingSmooth = false
+            handler.removeCallbacks(cancelSmoothConfirm)
+        }
         if (action != BarAction.ResetPresets && confirmingReset) {
             confirmingReset = false
             handler.removeCallbacks(cancelReset)
@@ -421,15 +467,13 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 focus = if (focus != null) bar.find(BarAction.OpenOptions) else null
                 hover = null
             }
-            is BarAction.ToggleOption -> {
-                val wasOn = stream.smoothLevel > 0
-                stream.toggleOption(action.index)
-                when {
-                    // Switching the app's own drawing of the video on or off needs the screen rebuilt.
-                    action.index == OptionsPad.SMOOTH_MOTION && wasOn != (stream.smoothLevel > 0) -> reconnect()
-                    action.index == OptionsPad.SMOOTH_MOTION -> XrNative.setSmoothLevel(xr, stream.smoothLevel)
-                    action.index == OptionsPad.FRAME_COUNT -> updateFrameCount()
+            is BarAction.ToggleOption -> when (action.index) {
+                OptionsPad.SMOOTH_MOTION -> pressSmooth()
+                OptionsPad.FRAME_COUNT -> {
+                    stream.toggleOption(action.index)
+                    updateFrameCount()
                 }
+                else -> stream.toggleOption(action.index)
             }
             BarAction.Leave -> leave(null)
         }

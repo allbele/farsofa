@@ -98,7 +98,10 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
     fun options(): BooleanArray =
         booleanArrayOf(padPrefs.triggers, padPrefs.lights, padPrefs.motion, padPrefs.fineHaptics, padPrefs.smoothMotion, padPrefs.showFrameCount)
 
-    val smoothLevel: Int get() = padPrefs.smoothLevel
+    var smoothLevel: Int
+        get() = padPrefs.smoothLevel
+        set(value) { padPrefs.smoothLevel = value }
+    val smoothLastLevel: Int get() = padPrefs.smoothLastLevel
     val showFrameCount: Boolean get() = padPrefs.showFrameCount
 
     /** Flips one option (smooth motion steps through its levels) and applies what can be applied at once. */
@@ -108,7 +111,7 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
             1 -> padPrefs.lights = !padPrefs.lights
             2 -> padPrefs.motion = !padPrefs.motion
             3 -> padPrefs.fineHaptics = !padPrefs.fineHaptics
-            4 -> padPrefs.smoothLevel = (padPrefs.smoothLevel + 1) % 4
+            4 -> return // smooth motion has levels and a confirmation; the screen that shows them handles it
             5 -> padPrefs.showFrameCount = !padPrefs.showFrameCount
         }
         Diagnostics.event("option $index toggled")

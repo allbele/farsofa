@@ -63,7 +63,7 @@
     <string name="bar_backspace">Apagar</string>
     <string name="streaming_notice">A imagem é transmitida do seu próprio console. Precisa de um Wi-Fi rápido e estável; perto do roteador funciona melhor.</string>
     <string name="controller_title">Opções</string>
-    <string name="controller_intro">As quatro primeiras são para o DualSense (o controle do PS5) ligado ao headset por Bluetooth. Valem a partir do próximo jogo.</string>
+    <string name="controller_intro">As quatro primeiras são para o DualSense (o controle do PS5) ligado ao headset por Bluetooth. Valem a partir da próxima vez que você conectar ao console.</string>
     <string name="controller_triggers">Gatilhos adaptáveis</string>
     <string name="controller_triggers_detail">Os gatilhos L2 e R2 endurecem ou tremem conforme o jogo, como no console.</string>
     <string name="controller_lights">Luzes do controle</string>
@@ -109,7 +109,7 @@
     <string name="pad_learn_done">Pronto. O app vai lembrar deste controle.</string>
     <string name="bar_options">Opções</string>
     <string name="bar_options_back">Voltar</string>
-    <string name="bar_options_hint">Ligar ou desligar o movimento suave reconecta o jogo sozinho. Os níveis mudam na hora.</string>
+    <string name="bar_options_hint">Os níveis do movimento suave mudam na hora. Ligar ou desligar reconecta o jogo.</string>
     <string name="bar_option_triggers">GATILHOS</string>
     <string name="bar_option_lights">LUZES</string>
     <string name="bar_option_motion">MOVIMENTO</string>
@@ -160,4 +160,6 @@
     <string name="bar_option_level">Nível %1$d</string>
     <string name="frame_count">%1$d reais + %2$d criados = %3$d imagens por segundo</string>
     <string name="frame_count_off">Movimento suave desligado: só as imagens do próprio jogo</string>
+    <string name="bar_smooth_confirm_off">Desligar o movimento suave? O jogo vai reconectar. Aperte de novo para confirmar.</string>
+    <string name="bar_smooth_confirm_on">Ligar o movimento suave? O jogo vai reconectar. Aperte de novo para confirmar.</string>
 </resources>

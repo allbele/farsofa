@@ -116,6 +116,9 @@ struct XrScreen
 	// The app draws the video itself, which is what frame prediction needs. Asked for at start.
 	bool smooth_requested = false;
 	SmoothVideo *smooth = nullptr; // owned by the frame thread
+	std::atomic<int> smooth_level{1};
+	std::atomic<int> smooth_real{0};
+	std::atomic<int> smooth_predicted{0};
 
 	// Changed from the UI thread while the frame loop runs.
 	std::mutex scene_mutex;
@@ -990,7 +993,12 @@ void submit_frame(XrScreen *xr)
 	}
 	update_input(xr, frame_state.predictedDisplayTime, scene.pointer);
 	if(xr->smooth)
+	{
+		xr->smooth->SetLevel(xr->smooth_level.load());
 		xr->smooth->Render(xr->env);
+		xr->smooth_real.store(xr->smooth->RealPerSecond());
+		xr->smooth_predicted.store(xr->smooth->PredictedPerSecond());
+	}
 
 	float aspect = static_cast<float>(xr->video_width) / static_cast<float>(xr->video_height);
 	bool curved = scene.curved && xr->has_cylinder;
@@ -1219,6 +1227,29 @@ JNIEXPORT jlong JNICALL XR_NATIVE(start)(JNIEnv *env, jclass, jobject activity, 
 
 	xr->thread = std::thread(frame_thread, xr);
 	return reinterpret_cast<jlong>(xr);
+}
+
+// How eagerly frames are made up (1 to 3). Takes effect at once; only on/off needs a new session.
+JNIEXPORT void JNICALL XR_NATIVE(setSmoothLevel)(JNIEnv *, jclass, jlong ptr, jint level)
+{
+	auto *xr = reinterpret_cast<XrScreen *>(ptr);
+	if(xr)
+		xr->smooth_level.store(level);
+}
+
+// {real pictures, made-up pictures} shown in the last second, or {-1, -1} when the app is not drawing the video.
+JNIEXPORT jintArray JNICALL XR_NATIVE(smoothStats)(JNIEnv *env, jclass, jlong ptr)
+{
+	auto *xr = reinterpret_cast<XrScreen *>(ptr);
+	jintArray result = env->NewIntArray(2);
+	jint values[2] = {-1, -1};
+	if(xr && xr->smooth_requested)
+	{
+		values[0] = xr->smooth_real.load();
+		values[1] = xr->smooth_predicted.load();
+	}
+	env->SetIntArrayRegion(result, 0, 2, values);
+	return result;
 }
 
 JNIEXPORT void JNICALL XR_NATIVE(setScene)(JNIEnv *, jclass, jlong ptr, jfloat distance, jfloat width, jboolean curved,

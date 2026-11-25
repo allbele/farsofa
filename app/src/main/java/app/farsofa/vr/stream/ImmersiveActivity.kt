@@ -208,6 +208,49 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         }
     }
 
+    /**
+     * Ends this connection and opens it again with the same console, for a change that cannot be made
+     * while the picture is up. The console needs a moment between the two or it answers "already in use".
+     */
+    private fun reconnect() {
+        if (leaving) return
+        leaving = true
+        Diagnostics.event("reconnecting to apply an option")
+        handler.removeCallbacksAndMessages(null)
+        if (!demo) store.current = layout
+        barSurface = null
+        overlaySurface = null
+        val session = xr
+        xr = 0L
+        stream.release {
+            if (session != 0L) XrNative.stop(session)
+            Thread.sleep(1500)
+            runOnUiThread { recreate() }
+        }
+    }
+
+    // A line under the screen saying how many pictures a second are real and how many are made up.
+    private var frameCountShown = false
+    private val frameCountTick = object : Runnable {
+        override fun run() {
+            if (leaving || !frameCountShown) return
+            if (mode == Mode.PLAYING) barSurface?.let { surface ->
+                val counts = XrNative.smoothStats(xr)
+                val text = if (counts[0] < 0) getString(R.string.frame_count_off)
+                else getString(R.string.frame_count, counts[0], counts[1], counts[0] + counts[1])
+                renderer.drawHint(surface, text)
+            }
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun updateFrameCount() {
+        handler.removeCallbacks(frameCountTick)
+        frameCountShown = stream.showFrameCount
+        if (frameCountShown) handler.post(frameCountTick)
+        pushScene()
+    }
+
     private fun drawDemoPicture(surface: Surface) {
         try {
             val picture = assets.open("demo.png").use { BitmapFactory.decodeStream(it) } ?: return
@@ -230,7 +273,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         XrNative.setScene(
             session, layout.distance, layout.width, layout.curved, layout.passthrough,
             if (controls) placement.screenLift else 0f, yaw, pitch,
-            mode != Mode.PLAYING && barSurface != null,
+            (mode != Mode.PLAYING || frameCountShown) && barSurface != null,
             placement.distance, placement.elevation, placement.width, placement.height,
             frameVisible && overlaySurface != null, Scene.OVERLAY_MARGIN, barSurface != null, follow,
         )
@@ -245,7 +288,7 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
         if (mode == Mode.CONTROLS && pad != null) barSurface?.let {
             renderer.drawPin(it, pad, pinDigits.length, pinIncorrect, hover ?: focus, held != null || grab == Grab.Item, barCursor)
         } else if (mode == Mode.CONTROLS && optionsPad != null) barSurface?.let {
-            renderer.drawOptions(it, optionsPad!!, stream.options(), hover ?: focus, held != null || grab == Grab.Item, barCursor)
+            renderer.drawOptions(it, optionsPad!!, stream.options(), stream.smoothLevel, hover ?: focus, held != null || grab == Grab.Item, barCursor)
         } else if (mode == Mode.CONTROLS) barSurface?.let {
             renderer.drawBar(
                 it, bar, presets, layout, follow, confirmingReset, hover ?: focus, held != null || grab == Grab.Item, barCursor,
@@ -378,7 +421,16 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
                 focus = if (focus != null) bar.find(BarAction.OpenOptions) else null
                 hover = null
             }
-            is BarAction.ToggleOption -> stream.toggleOption(action.index)
+            is BarAction.ToggleOption -> {
+                val wasOn = stream.smoothLevel > 0
+                stream.toggleOption(action.index)
+                when {
+                    // Switching the app's own drawing of the video on or off needs the screen rebuilt.
+                    action.index == OptionsPad.SMOOTH_MOTION && wasOn != (stream.smoothLevel > 0) -> reconnect()
+                    action.index == OptionsPad.SMOOTH_MOTION -> XrNative.setSmoothLevel(xr, stream.smoothLevel)
+                    action.index == OptionsPad.FRAME_COUNT -> updateFrameCount()
+                }
+            }
             BarAction.Leave -> leave(null)
         }
     }
@@ -633,6 +685,8 @@ class ImmersiveActivity : ComponentActivity(), StreamSession.Callbacks, XrNative
     // --- Stream ---
 
     override fun onStreamConnected() {
+        XrNative.setSmoothLevel(xr, stream.smoothLevel.coerceAtLeast(1))
+        handler.postDelayed({ updateFrameCount() }, HINT_MS + 500)
         if (leaving || mode != Mode.HINT) return
         barSurface?.let { renderer.drawHint(it, getString(R.string.immersive_hint)) }
         pushScene()

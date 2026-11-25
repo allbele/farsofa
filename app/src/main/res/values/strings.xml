@@ -110,7 +110,7 @@
     <string name="pad_learn_done">All set. The app will remember this gamepad.</string>
     <string name="bar_options">Options</string>
     <string name="bar_options_back">Back</string>
-    <string name="bar_options_hint">Changes apply at once. Smooth motion starts with the next game.</string>
+    <string name="bar_options_hint">Turning smooth motion on or off reconnects the game by itself. Levels change at once.</string>
     <string name="bar_option_triggers">TRIGGERS</string>
     <string name="bar_option_lights">LIGHTS</string>
     <string name="bar_option_motion">MOTION</string>
@@ -157,4 +157,8 @@
     <string name="report_failed">Could not send it right now. Check that the headset has internet and try again.</string>
     <string name="report_sent">Report sent. This is its code:</string>
     <string name="report_sent_hint">If you ask for help at contato@allbele.com, quote this code so we can find your report.</string>
+    <string name="bar_option_count">COUNTER</string>
+    <string name="bar_option_level">Level %1$d</string>
+    <string name="frame_count">%1$d real + %2$d made up = %3$d pictures a second</string>
+    <string name="frame_count_off">Smooth motion is off: the game shows its own pictures only</string>
 </resources>

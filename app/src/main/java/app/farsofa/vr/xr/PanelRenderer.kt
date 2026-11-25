@@ -144,7 +144,7 @@ class PanelRenderer(private val context: Context) {
         }
 
     /** The options: a line of explanation, a switch for each, and the way back. [values] says which are on. */
-    fun drawOptions(surface: Surface, pad: OptionsPad, values: BooleanArray, highlighted: BarItem?, pressed: Boolean, cursor: Pair<Float, Float>?) =
+    fun drawOptions(surface: Surface, pad: OptionsPad, values: BooleanArray, smoothLevel: Int, highlighted: BarItem?, pressed: Boolean, cursor: Pair<Float, Float>?) =
         draw(surface, Scene.BAR_PX_WIDTH, Scene.BAR_PX_HEIGHT) { canvas ->
             panel(canvas, 0f, 0f, Scene.BAR_PX_WIDTH.toFloat(), Scene.BAR_PX_HEIGHT.toFloat())
             text.textSize = 32f
@@ -155,7 +155,7 @@ class PanelRenderer(private val context: Context) {
 
             val captions = intArrayOf(
                 R.string.bar_option_triggers, R.string.bar_option_lights, R.string.bar_option_motion,
-                R.string.bar_option_haptics, R.string.bar_option_smooth,
+                R.string.bar_option_haptics, R.string.bar_option_smooth, R.string.bar_option_count,
             )
             for (item in pad.items) {
                 val action = item.action
@@ -175,7 +175,9 @@ class PanelRenderer(private val context: Context) {
                     canvas.drawRoundRect(rect, CORNER, CORNER, stroke)
                 }
                 if (action is BarAction.ToggleOption) {
-                    captioned(canvas, item.box, string(captions[action.index]), string(if (isOn) R.string.bar_option_on else R.string.bar_option_off))
+                    val value = if (action.index == OptionsPad.SMOOTH_MOTION && isOn) context.getString(R.string.bar_option_level, smoothLevel)
+                    else string(if (isOn) R.string.bar_option_on else R.string.bar_option_off)
+                    captioned(canvas, item.box, string(captions[action.index]), value)
                 } else {
                     label(canvas, item.box, string(R.string.bar_options_back), 34f, TEXT)
                 }

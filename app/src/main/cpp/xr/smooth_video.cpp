@@ -704,6 +704,8 @@ void SmoothVideo::Render(JNIEnv *env)
 				moving_ = true;
 			else if(motion_level_ < MOTION_OFF)
 				moving_ = false;
+			if(level_ >= 2)
+				moving_ = true; // from level 2 up, calm scenes are predicted too
 
 			int64_t interval = now - real_time_ns_;
 			if(interval > 4000000 && interval < 100000000)
@@ -735,6 +737,7 @@ void SmoothVideo::Render(JNIEnv *env)
 			drawn_once_ = true;
 			shown_predicted_ = false;
 			reals_++;
+			real_this_second_++;
 		}
 	}
 	else if(drawn_once_)
@@ -742,7 +745,7 @@ void SmoothVideo::Render(JNIEnv *env)
 		double period = std::min(std::max(period_ns_, PERIOD_MIN_NS), PERIOD_MAX_NS);
 		float scale = static_cast<float>(static_cast<double>(now - real_time_ns_) / period);
 		bool predict = predicting && history_count_ >= 2 && moving_ && pair_adjacent_ && scale > 0.05f && scale <= 1.0f;
-		if(predict && mask_ready_)
+		if(predict && mask_ready_ && level_ < 3)
 		{
 			if(!extrapolate_checked_)
 			{
@@ -752,6 +755,7 @@ void SmoothVideo::Render(JNIEnv *env)
 			}
 			if(extrapolate_)
 			{
+				predicted_this_second_++;
 				extrapolate_(history_[1 - history_newest_], history_[history_newest_], predicted_texture_, scale);
 				GLuint target = Acquire();
 				if(target)
@@ -788,7 +792,7 @@ void SmoothVideo::Render(JNIEnv *env)
 					}
 					else
 					{
-						LOGI("Frame prediction is working");
+						LOGI("Frame prediction is working, on the whole picture");
 					}
 				}
 				Release();
@@ -796,6 +800,7 @@ void SmoothVideo::Render(JNIEnv *env)
 				{
 					shown_predicted_ = true;
 					predicted_++;
+					predicted_this_second_++;
 				}
 			}
 		}
@@ -813,6 +818,13 @@ void SmoothVideo::Render(JNIEnv *env)
 		}
 	}
 
+	if(now - second_start_ns_ >= 1000000000LL)
+	{
+		real_per_second_ = real_this_second_;
+		predicted_per_second_ = predicted_this_second_;
+		real_this_second_ = predicted_this_second_ = 0;
+		second_start_ns_ = now;
+	}
 	if(now - report_time_ns_ >= 10000000000LL)
 		Report();
 }
@@ -820,8 +832,8 @@ void SmoothVideo::Render(JNIEnv *env)
 void SmoothVideo::Report()
 {
 	int measured = reals_ + repeats_;
-	LOGI("10 s: %d real, %d repeated, %d predicted, %d cuts, source %.1f fps, moving %s, compare %.2f ms",
-			reals_, repeats_, predicted_, cuts_, 1000000000.0 / std::min(std::max(period_ns_, PERIOD_MIN_NS), PERIOD_MAX_NS),
+	LOGI("10 s: level %d, %d real, %d repeated, %d predicted, %d cuts, source %.1f fps, moving %s, compare %.2f ms",
+			level_, reals_, repeats_, predicted_, cuts_, 1000000000.0 / std::min(std::max(period_ns_, PERIOD_MIN_NS), PERIOD_MAX_NS),
 			moving_ ? "yes" : "no", measured > 0 ? measure_ms_ / measured : 0.0);
 	reals_ = repeats_ = predicted_ = cuts_ = 0;
 	measure_ms_ = 0.0;

@@ -192,9 +192,10 @@ class OptionsPad : Panel() {
     }
 
     companion object {
-        /** Triggers, lights, motion, detailed haptics, smooth motion: in that order. */
-        const val OPTIONS = 5
+        /** Triggers, lights, motion, detailed haptics, smooth motion, frame counter: in that order. */
+        const val OPTIONS = 6
         const val SMOOTH_MOTION = 4
+        const val FRAME_COUNT = 5
     }
 }
 

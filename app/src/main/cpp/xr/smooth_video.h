@@ -39,6 +39,15 @@ class SmoothVideo
 		/** Draws whatever this refresh should show. Call once per frame, before the layers are submitted. */
 		void Render(JNIEnv *env);
 
+		/**
+		 * How eagerly frames are made up: 1 only where the picture moves and only while it moves,
+		 * 2 where it moves but in calm scenes too, 3 the whole picture all the time.
+		 */
+		void SetLevel(int level) { level_ = level; }
+		/** Pictures shown in the last full second: real ones, and ones made up. */
+		int RealPerSecond() const { return real_per_second_; }
+		int PredictedPerSecond() const { return predicted_per_second_; }
+
 		XrSwapchain Swapchain() const { return swapchain_; }
 		/** The Surface the decoder writes to (a local reference owned by this object as a global one). */
 		jobject Surface() const { return surface_; }
@@ -112,6 +121,12 @@ class SmoothVideo
 		int mask_width_ = 0;
 		int mask_height_ = 0;
 		bool mask_ready_ = false;
+		int level_ = 1;
+		int64_t second_start_ns_ = 0;
+		int real_this_second_ = 0;
+		int predicted_this_second_ = 0;
+		int real_per_second_ = 0;
+		int predicted_per_second_ = 0;
 		bool drawn_once_ = false;
 
 		float recent_change_[3] = {0, 0, 0};

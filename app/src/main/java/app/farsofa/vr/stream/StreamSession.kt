@@ -96,16 +96,20 @@ class StreamSession(private val activity: Activity, intent: Intent, private val 
 
     /** The options a player can change mid-game, in the order the options pad shows them. */
     fun options(): BooleanArray =
-        booleanArrayOf(padPrefs.triggers, padPrefs.lights, padPrefs.motion, padPrefs.fineHaptics, padPrefs.smoothMotion)
+        booleanArrayOf(padPrefs.triggers, padPrefs.lights, padPrefs.motion, padPrefs.fineHaptics, padPrefs.smoothMotion, padPrefs.showFrameCount)
 
-    /** Flips one option and applies it at once where that is possible (smooth motion waits for the next game). */
+    val smoothLevel: Int get() = padPrefs.smoothLevel
+    val showFrameCount: Boolean get() = padPrefs.showFrameCount
+
+    /** Flips one option (smooth motion steps through its levels) and applies what can be applied at once. */
     fun toggleOption(index: Int) {
         when (index) {
             0 -> padPrefs.triggers = !padPrefs.triggers
             1 -> padPrefs.lights = !padPrefs.lights
             2 -> padPrefs.motion = !padPrefs.motion
             3 -> padPrefs.fineHaptics = !padPrefs.fineHaptics
-            4 -> padPrefs.smoothMotion = !padPrefs.smoothMotion
+            4 -> padPrefs.smoothLevel = (padPrefs.smoothLevel + 1) % 4
+            5 -> padPrefs.showFrameCount = !padPrefs.showFrameCount
         }
         Diagnostics.event("option $index toggled")
         val session = ptr

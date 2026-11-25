@@ -109,7 +109,7 @@
     <string name="pad_learn_done">Pronto. O app vai lembrar deste controle.</string>
     <string name="bar_options">Opções</string>
     <string name="bar_options_back">Voltar</string>
-    <string name="bar_options_hint">As mudanças valem na hora. O movimento suave começa no próximo jogo.</string>
+    <string name="bar_options_hint">Ligar ou desligar o movimento suave reconecta o jogo sozinho. Os níveis mudam na hora.</string>
     <string name="bar_option_triggers">GATILHOS</string>
     <string name="bar_option_lights">LUZES</string>
     <string name="bar_option_motion">MOVIMENTO</string>
@@ -156,4 +156,8 @@
     <string name="report_failed">Não foi possível enviar agora. Veja se o headset está com internet e tente de novo.</string>
     <string name="report_sent">Relatório enviado. Este é o código dele:</string>
     <string name="report_sent_hint">Se for pedir ajuda em contato@allbele.com, informe este código para acharmos o seu relatório.</string>
+    <string name="bar_option_count">CONTADOR</string>
+    <string name="bar_option_level">Nível %1$d</string>
+    <string name="frame_count">%1$d reais + %2$d criados = %3$d imagens por segundo</string>
+    <string name="frame_count_off">Movimento suave desligado: só as imagens do próprio jogo</string>
 </resources>

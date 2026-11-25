@@ -55,6 +55,12 @@ object XrNative {
         smooth: Boolean, listener: Listener,
     ): Long
 
+    /** How eagerly frames are made up, 1 to 3. Applies at once. */
+    @JvmStatic external fun setSmoothLevel(ptr: Long, level: Int)
+
+    /** Real and made-up pictures shown in the last second, or -1 and -1 when smooth motion is off. */
+    @JvmStatic external fun smoothStats(ptr: Long): IntArray
+
     /** Places every layer. Lengths in metres, angles in radians; see Scene.kt for the conventions. */
     @JvmStatic external fun setScene(
         ptr: Long, distance: Float, width: Float, curved: Boolean, passthrough: Boolean, screenY: Float, yaw: Float,

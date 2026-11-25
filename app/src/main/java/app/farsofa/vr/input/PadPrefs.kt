@@ -29,12 +29,21 @@ class PadPrefs(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_FINE_HAPTICS, value).apply()
 
     /**
-     * Frames are made up for a 30 fps game so it moves like 60. Not a controller setting, but it lives
-     * here with the other things a player may want switched off. Still being tuned.
+     * Frames are made up for a 30 fps game so it moves like more. 0 is off; 1 to 3 say how eagerly:
+     * only where and while the picture moves, in calm scenes too, or the whole picture all the time.
+     * Not a controller setting, but it lives here with the other things a player may want changed.
      */
-    var smoothMotion: Boolean
-        get() = prefs.getBoolean(KEY_SMOOTH, false)
-        set(value) = prefs.edit().putBoolean(KEY_SMOOTH, value).apply()
+    var smoothLevel: Int
+        get() = if (prefs.contains(KEY_SMOOTH_LEVEL)) prefs.getInt(KEY_SMOOTH_LEVEL, 0).coerceIn(0, 3)
+        else if (prefs.getBoolean(KEY_SMOOTH, false)) 1 else 0
+        set(value) = prefs.edit().putInt(KEY_SMOOTH_LEVEL, value.coerceIn(0, 3)).apply()
+
+    val smoothMotion: Boolean get() = smoothLevel > 0
+
+    /** A small readout of how many pictures a second are real and how many are made up. */
+    var showFrameCount: Boolean
+        get() = prefs.getBoolean(KEY_FRAME_COUNT, false)
+        set(value) = prefs.edit().putBoolean(KEY_FRAME_COUNT, value).apply()
 
     /** True when any of it needs to talk back to the controller over Bluetooth. */
     val needsLink: Boolean get() = triggers || lights || fineHaptics
@@ -45,5 +54,7 @@ class PadPrefs(context: Context) {
         const val KEY_MOTION = "motion"
         const val KEY_FINE_HAPTICS = "fineHaptics"
         const val KEY_SMOOTH = "smoothMotion"
+        const val KEY_SMOOTH_LEVEL = "smoothLevel"
+        const val KEY_FRAME_COUNT = "frameCount"
     }
 }
